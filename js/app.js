@@ -1,0 +1,362 @@
+// ============================================================================
+// APP.JS — login, navegación por rol y formulario de ingreso
+// ============================================================================
+
+// --- 1. CREDENCIALES (requerimiento estricto del proyecto) ------------------
+// ⚠️ LEER: estas credenciales SOLO controlan qué pantallas se muestran.
+// Cualquier persona que abra el código fuente del sitio puede leerlas.
+// La protección real de los datos está en Supabase (sql/setup.sql):
+//   · sin sesión autenticada NO se puede leer nada de la base;
+//   · la única escritura posible es la función registrar_familia().
+// La contraseña de 'admin' debe coincidir con el usuario creado en
+// Supabase → Authentication → Users (ver README, paso 3).
+const USERS = {
+  digitador: { password: 'digitador2026', role: 'digitador' },
+  admin: {
+    password: 'admin2026',        // ⚠️ CAMBIAR (misma clave que en Supabase Auth)
+    role: 'admin',
+    email: 'admin@censo.app',     // ⚠️ CAMBIAR (mismo correo que en Supabase Auth)
+  },
+};
+
+// --- Estado global ----------------------------------------------------------
+let currentUser = null;        // { username, role }
+let votosFamilia = [];         // [{ partidoId, cantidad }]
+let partidoSeleccionado = null;
+
+// --- Helpers de DOM ---------------------------------------------------------
+const $ = (sel) => document.querySelector(sel);
+
+function toast(mensaje, tipo = 'ok') {
+  const box = $('#toast-box');
+  box.textContent = mensaje;
+  box.className =
+    'max-w-md rounded-lg px-4 py-3 text-[14px] font-semibold text-white shadow-lg ' +
+    (tipo === 'error' ? 'bg-red-600' : tipo === 'aviso' ? 'bg-amber-600' : 'bg-ink-900');
+  box.classList.remove('hidden');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => box.classList.add('hidden'), 3800);
+}
+
+// ============================================================================
+// 2. LOGIN / LOGOUT / SESIÓN
+// ============================================================================
+
+function login(e) {
+  e.preventDefault();
+  const usuario = $('#login-user').value.trim().toLowerCase();
+  const clave = $('#login-pass').value;
+  const registro = USERS[usuario];
+
+  const errorEl = $('#login-error');
+  if (!registro || registro.password !== clave) {
+    errorEl.textContent = 'Usuario o contraseña incorrectos.';
+    errorEl.classList.remove('hidden');
+    return;
+  }
+
+  errorEl.classList.add('hidden');
+  currentUser = { username: usuario, role: registro.role };
+  sessionStorage.setItem('censo_user', JSON.stringify(currentUser));
+  mostrarApp();
+}
+
+function logout() {
+  sessionStorage.removeItem('censo_user');
+  sb.auth.signOut().finally(() => location.reload());
+}
+
+// El dashboard necesita una sesión REAL de Supabase para poder leer datos.
+// Se inicia sesión con la cuenta única de Auth solo cuando el admin entra.
+async function ensureAdminSession() {
+  const { data } = await sb.auth.getSession();
+  if (data && data.session) return { ok: true };
+  const { error } = await sb.auth.signInWithPassword({
+    email: USERS.admin.email,
+    password: USERS.admin.password,
+  });
+  if (error) return { ok: false, mensaje: error.message };
+  return { ok: true };
+}
+
+function mostrarApp() {
+  $('#view-login').classList.add('hidden');
+  const app = $('#view-app');
+  app.classList.remove('hidden');
+  app.classList.add('flex');
+
+  $('#user-chip').textContent =
+    currentUser.role === 'admin' ? 'Administrador' : 'Digitador';
+
+  // El tab de Dashboard solo existe para el admin
+  if (currentUser.role === 'admin') $('#tab-dashboard').classList.remove('hidden');
+
+  cambiarSeccion('section-ingreso');
+}
+
+// ============================================================================
+// 3. NAVEGACIÓN ENTRE SECCIONES
+// ============================================================================
+
+function cambiarSeccion(idSeccion) {
+  // Guardia por rol: un digitador nunca puede abrir el dashboard
+  if (idSeccion === 'section-dashboard' && (!currentUser || currentUser.role !== 'admin')) return;
+
+  ['section-ingreso', 'section-dashboard'].forEach((id) => {
+    $('#' + id).classList.toggle('hidden', id !== idSeccion);
+  });
+
+  document.querySelectorAll('.tab-btn').forEach((btn) => {
+    const activo = btn.dataset.seccion === idSeccion;
+    btn.classList.toggle('bg-ink-50', activo);
+    btn.classList.toggle('text-ink-900', activo);
+    btn.classList.toggle('text-ink-200', !activo);
+  });
+
+  if (idSeccion === 'section-dashboard' && typeof initDashboard === 'function') {
+    initDashboard();
+  }
+}
+
+// ============================================================================
+// 4. SELECTS DE UBICACIÓN EN CASCADA
+// ============================================================================
+
+const uniq = (arr) =>
+  [...new Set(arr)].filter(Boolean).sort((a, b) => a.localeCompare(b, 'es'));
+
+// Valores únicos de un campo, filtrando por los niveles superiores ya elegidos.
+// El filtro compara con exactitud, incluyendo '' (por eso una zona urbana con
+// aldea:'' sí ofrece sus barrios cuando no se elige aldea).
+function opcionesUbicacion(campo, filtro) {
+  return uniq(
+    UBICACIONES
+      .filter((fila) => Object.keys(filtro).every((k) => fila[k] === filtro[k]))
+      .map((fila) => fila[campo])
+  );
+}
+
+function llenarSelect(el, valores, { obligatorio = false } = {}) {
+  el.innerHTML = '';
+  const primera = document.createElement('option');
+  primera.value = '';
+  primera.textContent = obligatorio ? 'Seleccione…' : '— Ninguno / No aplica —';
+  el.appendChild(primera);
+  valores.forEach((v) => {
+    const op = document.createElement('option');
+    op.value = v;
+    op.textContent = v;
+    el.appendChild(op);
+  });
+  el.disabled = obligatorio && valores.length === 0;
+}
+
+const ubicacionActual = () => ({
+  departamento: $('#sel-departamento').value,
+  municipio: $('#sel-municipio').value,
+  aldea: $('#sel-aldea').value,
+  caserio: $('#sel-caserio').value,
+  barrio: $('#sel-barrio').value,
+});
+
+function initUbicacion() {
+  llenarSelect($('#sel-departamento'), uniq(UBICACIONES.map((r) => r.departamento)), { obligatorio: true });
+  actualizarMunicipios();
+
+  $('#sel-departamento').addEventListener('change', actualizarMunicipios);
+  $('#sel-municipio').addEventListener('change', actualizarAldeas);
+  $('#sel-aldea').addEventListener('change', actualizarCaserios);
+  $('#sel-caserio').addEventListener('change', actualizarBarrios);
+}
+
+function actualizarMunicipios() {
+  const { departamento } = ubicacionActual();
+  llenarSelect($('#sel-municipio'), opcionesUbicacion('municipio', { departamento }), { obligatorio: true });
+  actualizarAldeas();
+}
+function actualizarAldeas() {
+  const { departamento, municipio } = ubicacionActual();
+  llenarSelect($('#sel-aldea'), opcionesUbicacion('aldea', { departamento, municipio }));
+  actualizarCaserios();
+}
+function actualizarCaserios() {
+  const { departamento, municipio, aldea } = ubicacionActual();
+  llenarSelect($('#sel-caserio'), opcionesUbicacion('caserio', { departamento, municipio, aldea }));
+  actualizarBarrios();
+}
+function actualizarBarrios() {
+  const { departamento, municipio, aldea, caserio } = ubicacionActual();
+  llenarSelect($('#sel-barrio'), opcionesUbicacion('barrio', { departamento, municipio, aldea, caserio }));
+}
+
+// ============================================================================
+// 5. VOTOS: FICHAS DE PARTIDO + LISTA DINÁMICA
+// ============================================================================
+// Nota de diseño: un <select> nativo NO puede mostrar imágenes, por eso los
+// partidos se eligen con fichas (logo + sigla), más rápidas en el celular.
+
+function renderChipsPartidos() {
+  const cont = $('#chips-partidos');
+  cont.innerHTML = '';
+  PARTIDOS.forEach((p) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.dataset.partido = p.id;
+    btn.setAttribute('aria-pressed', 'false');
+    btn.title = p.nombre;
+    btn.className =
+      'chip-partido flex flex-col items-center gap-1.5 rounded-lg border border-ink-200 bg-white px-2 py-2.5 transition hover:border-ink-400 focus-visible:ring-2 focus-visible:ring-ink-400';
+    btn.innerHTML = `
+      <span class="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full" style="background:${p.color}1A">
+        <img src="${p.logo}" alt="" class="h-9 w-9 object-contain" onerror="this.remove()" />
+      </span>
+      <span class="text-[12px] font-bold" style="color:${p.color}">${p.sigla}</span>`;
+    btn.addEventListener('click', () => seleccionarPartido(p.id));
+    cont.appendChild(btn);
+  });
+}
+
+function seleccionarPartido(id) {
+  partidoSeleccionado = id;
+  document.querySelectorAll('.chip-partido').forEach((btn) => {
+    const activo = btn.dataset.partido === id;
+    btn.setAttribute('aria-pressed', String(activo));
+    btn.classList.toggle('ring-2', activo);
+    btn.classList.toggle('ring-ink-900', activo);
+    btn.classList.toggle('border-ink-900', activo);
+  });
+}
+
+function agregarVoto() {
+  const cantidad = parseInt($('#inp-cantidad').value, 10);
+
+  if (!partidoSeleccionado) return toast('Primero selecciona un partido.', 'aviso');
+  if (!Number.isInteger(cantidad) || cantidad < 1) return toast('La cantidad debe ser 1 o más.', 'aviso');
+  if (votosFamilia.some((v) => v.partidoId === partidoSeleccionado)) {
+    return toast('Ese partido ya está en la lista. Elimínalo para corregir la cantidad.', 'aviso');
+  }
+
+  votosFamilia.push({ partidoId: partidoSeleccionado, cantidad });
+  renderListaVotos();
+
+  // Listo para la siguiente línea
+  $('#inp-cantidad').value = 1;
+  seleccionarPartido(null);
+  partidoSeleccionado = null;
+}
+
+function quitarVoto(indice) {
+  votosFamilia.splice(indice, 1);
+  renderListaVotos();
+}
+
+function renderListaVotos() {
+  const lista = $('#lista-votos');
+  lista.innerHTML = '';
+
+  votosFamilia.forEach((v, i) => {
+    const p = PARTIDOS.find((x) => x.id === v.partidoId) || { sigla: v.partidoId, nombre: v.partidoId, color: '#7C8496' };
+    const li = document.createElement('li');
+    li.className = 'flex items-center gap-3 px-4 py-2.5';
+    li.innerHTML = `
+      <span class="inline-flex h-7 w-12 items-center justify-center rounded-md text-[12px] font-extrabold text-white" style="background:${p.color}">${p.sigla}</span>
+      <span class="flex-1 truncate text-[14px]">${p.nombre}</span>
+      <span class="font-display text-[15px] font-extrabold tabular-nums">${v.cantidad} ${v.cantidad === 1 ? 'voto' : 'votos'}</span>
+      <button type="button" class="quitar-voto rounded p-1 text-ink-400 hover:bg-red-50 hover:text-red-600" aria-label="Quitar línea" data-indice="${i}">✕</button>`;
+    lista.appendChild(li);
+  });
+
+  lista.querySelectorAll('.quitar-voto').forEach((btn) =>
+    btn.addEventListener('click', () => quitarVoto(parseInt(btn.dataset.indice, 10)))
+  );
+
+  const total = votosFamilia.reduce((s, v) => s + v.cantidad, 0);
+  $('#total-votos').textContent = total;
+  $('#lista-vacia').classList.toggle('hidden', votosFamilia.length > 0);
+  const filaTotal = $('#fila-total');
+  filaTotal.classList.toggle('hidden', votosFamilia.length === 0);
+  filaTotal.classList.toggle('flex', votosFamilia.length > 0);
+}
+
+// ============================================================================
+// 6. GUARDAR FAMILIA (RPC registrar_familia)
+// ============================================================================
+
+async function guardarFamilia() {
+  const u = ubicacionActual();
+  const nombre = $('#inp-familia').value.trim();
+  const telefono = $('#inp-telefono').value.trim();
+
+  if (!u.departamento) return toast('Selecciona el departamento.', 'aviso');
+  if (!u.municipio) return toast('Selecciona el municipio.', 'aviso');
+  if (!nombre) return toast('Escribe el nombre o identificador de la familia.', 'aviso');
+  if (!telefono) return toast('Escribe el teléfono de la familia.', 'aviso');
+  if (votosFamilia.length === 0) return toast('Agrega al menos una línea de votos.', 'aviso');
+
+  const payload = {
+    ...u,
+    nombre_familia: nombre,
+    telefono,
+    registrado_por: currentUser ? currentUser.username : null,
+    votos: votosFamilia.map((v) => ({ partido: v.partidoId, cantidad: v.cantidad })),
+  };
+
+  const btn = $('#btn-guardar');
+  btn.disabled = true;
+  btn.textContent = 'Guardando…';
+
+  try {
+    const { error } = await sb.rpc('registrar_familia', { payload });
+    if (error) throw error;
+
+    toast('Familia registrada correctamente.');
+    // Se conserva la ubicación: el digitador sigue casa por casa en el
+    // mismo caserío sin volver a seleccionar todo. Solo se limpia la familia.
+    $('#inp-familia').value = '';
+    $('#inp-telefono').value = '';
+    votosFamilia = [];
+    renderListaVotos();
+    $('#inp-familia').focus();
+  } catch (err) {
+    const detalle = err && err.message ? err.message : 'sin conexión';
+    toast(`No se pudo guardar (${detalle}). Verifica tu señal o la configuración de js/supabaseClient.js.`, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Guardar familia';
+  }
+}
+
+// ============================================================================
+// 7. INICIALIZACIÓN
+// ============================================================================
+
+function init() {
+  $('#form-login').addEventListener('submit', login);
+  $('#btn-logout').addEventListener('click', logout);
+  document.querySelectorAll('.tab-btn').forEach((btn) =>
+    btn.addEventListener('click', () => cambiarSeccion(btn.dataset.seccion))
+  );
+  $('#btn-agregar-voto').addEventListener('click', agregarVoto);
+  $('#btn-guardar').addEventListener('click', guardarFamilia);
+
+  initUbicacion();
+  renderChipsPartidos();
+  renderListaVotos();
+
+  // Restaurar sesión de la pestaña (se pierde al cerrar el navegador)
+  const guardado = sessionStorage.getItem('censo_user');
+  if (guardado) {
+    try {
+      currentUser = JSON.parse(guardado);
+      if (currentUser && USERS[currentUser.username]) mostrarApp();
+      else currentUser = null;
+    } catch (_) { currentUser = null; }
+  }
+
+  // PWA: registrar el service worker
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(() => { /* sin PWA, la app sigue funcionando */ });
+  }
+}
+
+document.addEventListener('DOMContentLoaded', init);

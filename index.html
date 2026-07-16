@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#111826" />
+  <meta name="description" content="Censo de popularidad casa por casa" />
+
+  <!-- ⚠️ CAMBIAR: nombre real de la app -->
+  <title>CensoGT — Censo casa por casa</title>
+
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" type="image/png" href="img/icon-192.png" />
+  <link rel="apple-touch-icon" href="img/icon-192.png" />
+
+  <!-- Tipografía: Archivo (títulos) + Inter (texto) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+
+  <!-- Tailwind CSS (CDN, según requerimiento del proyecto) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            ink:   { 900: '#111826', 800: '#1D2432', 700: '#2A3244', 500: '#5A6376', 400: '#7C8496', 200: '#D9DDE4', 100: '#E9EBEF', 50: '#F4F5F7' },
+          },
+          fontFamily: {
+            display: ['Archivo', 'system-ui', 'sans-serif'],
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+          },
+        },
+      },
+    };
+  </script>
+  <style type="text/tailwindcss">
+    @layer base {
+      html { -webkit-tap-highlight-color: transparent; }
+      select, input { @apply outline-none; }
+    }
+    @layer components {
+      .campo { @apply w-full rounded-lg border border-ink-200 bg-white px-3 py-2.5 text-[15px] text-ink-900 focus:border-ink-700 focus:ring-2 focus:ring-ink-200 disabled:bg-ink-100 disabled:text-ink-400; }
+      .etiqueta { @apply mb-1 block text-[13px] font-medium text-ink-500; }
+      .eyebrow { @apply font-display text-[11px] font-bold uppercase tracking-[0.14em] text-ink-400; }
+      .btn-primario { @apply inline-flex items-center justify-center gap-2 rounded-lg bg-ink-900 px-4 py-3 font-display text-[15px] font-bold text-white transition hover:bg-ink-700 focus-visible:ring-2 focus-visible:ring-ink-400 focus-visible:ring-offset-2 disabled:opacity-50; }
+      .btn-secundario { @apply inline-flex items-center justify-center gap-2 rounded-lg border border-ink-200 bg-white px-4 py-2.5 text-[14px] font-semibold text-ink-700 transition hover:border-ink-400 focus-visible:ring-2 focus-visible:ring-ink-300; }
+      .tarjeta { @apply rounded-xl border border-ink-100 bg-white shadow-sm; }
+    }
+  </style>
+
+  <!-- Librerías (CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+
+  <!-- Código de la app (el orden importa) -->
+  <script defer src="js/configData.js"></script>
+  <script defer src="js/supabaseClient.js"></script>
+  <script defer src="js/app.js"></script>
+  <script defer src="js/dashboard.js"></script>
+</head>
+
+<body class="min-h-screen bg-ink-50 font-sans text-ink-900 antialiased">
+  <noscript>
+    <p class="p-6 text-center">Esta aplicación necesita JavaScript activado.</p>
+  </noscript>
+
+  <!-- ======================================================================
+       VISTA: LOGIN
+  ======================================================================= -->
+  <div id="view-login" class="flex min-h-screen items-center justify-center px-4 py-10">
+    <div class="w-full max-w-sm">
+      <div class="mb-8 text-center">
+        <!-- ⚠️ CAMBIAR: logo real en img/logo.png -->
+        <img src="img/logo.png" alt="Logo" class="mx-auto mb-4 h-16 w-auto" onerror="this.style.display='none'" />
+        <!-- ⚠️ CAMBIAR: nombre real de la app -->
+        <h1 class="font-display text-3xl font-extrabold tracking-tight">CensoGT</h1>
+        <p class="mt-1 text-[14px] text-ink-500">Censo de popularidad casa por casa</p>
+      </div>
+
+      <form id="form-login" class="tarjeta p-6">
+        <div class="mb-4">
+          <label for="login-user" class="etiqueta">Usuario</label>
+          <input id="login-user" type="text" class="campo" autocomplete="username" required autofocus />
+        </div>
+        <div class="mb-5">
+          <label for="login-pass" class="etiqueta">Contraseña</label>
+          <input id="login-pass" type="password" class="campo" autocomplete="current-password" required />
+        </div>
+        <p id="login-error" class="mb-4 hidden rounded-lg bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700"></p>
+        <button type="submit" class="btn-primario w-full">Iniciar sesión</button>
+      </form>
+
+      <p class="mt-6 text-center text-[12px] text-ink-400">Sistema de uso interno · Acceso restringido</p>
+    </div>
+  </div>
+
+  <!-- ======================================================================
+       VISTA: APLICACIÓN (oculta hasta iniciar sesión)
+  ======================================================================= -->
+  <div id="view-app" class="hidden min-h-screen flex-col">
+
+    <!-- Barra superior -->
+    <header class="sticky top-0 z-20 border-b border-ink-700 bg-ink-900 text-white">
+      <div class="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3">
+        <div class="flex items-center gap-2.5">
+          <img src="img/logo.png" alt="" class="h-7 w-auto brightness-0 invert" onerror="this.style.display='none'" />
+          <!-- ⚠️ CAMBIAR: nombre real de la app -->
+          <span class="font-display text-lg font-bold tracking-tight">CensoGT</span>
+        </div>
+        <div class="flex items-center gap-3">
+          <span id="user-chip" class="rounded-full bg-ink-700 px-3 py-1 text-[12px] font-semibold"></span>
+          <button id="btn-logout" class="text-[13px] font-medium text-ink-200 underline-offset-2 hover:text-white hover:underline">Salir</button>
+        </div>
+      </div>
+
+      <!-- Pestañas por rol -->
+      <nav class="mx-auto flex max-w-5xl gap-1 px-4">
+        <button id="tab-ingreso" data-seccion="section-ingreso"
+          class="tab-btn rounded-t-lg px-4 py-2.5 font-display text-[14px] font-bold">Ingreso de datos</button>
+        <button id="tab-dashboard" data-seccion="section-dashboard"
+          class="tab-btn hidden rounded-t-lg px-4 py-2.5 font-display text-[14px] font-bold">Dashboard</button>
+      </nav>
+    </header>
+
+    <main class="mx-auto w-full max-w-5xl flex-1 px-4 py-6 pb-28 md:pb-10">
+
+      <!-- ==================================================================
+           SECCIÓN 1: INGRESO DE DATOS
+      =================================================================== -->
+      <section id="section-ingreso" class="mx-auto max-w-2xl">
+        <div class="tarjeta overflow-hidden">
+
+          <!-- Paso 1 · Ubicación -->
+          <fieldset class="border-b border-ink-100 p-5">
+            <legend class="sr-only">Ubicación</legend>
+            <p class="eyebrow mb-4">1 · Ubicación</p>
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label for="sel-departamento" class="etiqueta">Departamento *</label>
+                <select id="sel-departamento" class="campo" required></select>
+              </div>
+              <div>
+                <label for="sel-municipio" class="etiqueta">Municipio *</label>
+                <select id="sel-municipio" class="campo" required></select>
+              </div>
+              <div>
+                <label for="sel-aldea" class="etiqueta">Aldea</label>
+                <select id="sel-aldea" class="campo"></select>
+              </div>
+              <div>
+                <label for="sel-caserio" class="etiqueta">Caserío</label>
+                <select id="sel-caserio" class="campo"></select>
+              </div>
+              <div class="sm:col-span-2">
+                <label for="sel-barrio" class="etiqueta">Barrio / Zona</label>
+                <select id="sel-barrio" class="campo"></select>
+              </div>
+            </div>
+          </fieldset>
+
+          <!-- Paso 2 · Familia -->
+          <fieldset class="border-b border-ink-100 p-5">
+            <legend class="sr-only">Familia</legend>
+            <p class="eyebrow mb-4">2 · Familia</p>
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label for="inp-familia" class="etiqueta">Nombre / Identificador *</label>
+                <input id="inp-familia" type="text" class="campo" placeholder="Ej. Familia López García" required />
+              </div>
+              <div>
+                <label for="inp-telefono" class="etiqueta">Teléfono *</label>
+                <input id="inp-telefono" type="tel" inputmode="tel" class="campo" placeholder="Ej. 5512 3456" required />
+              </div>
+            </div>
+          </fieldset>
+
+          <!-- Paso 3 · Votos -->
+          <fieldset class="p-5">
+            <legend class="sr-only">Votos</legend>
+            <p class="eyebrow mb-4">3 · Votos de la familia</p>
+
+            <label class="etiqueta">Partido que apoya</label>
+            <div id="chips-partidos" class="mb-4 grid grid-cols-3 gap-2 sm:grid-cols-6"></div>
+
+            <div class="flex items-end gap-3">
+              <div class="w-32">
+                <label for="inp-cantidad" class="etiqueta">Cantidad de votos</label>
+                <input id="inp-cantidad" type="number" min="1" max="50" value="1" class="campo text-center" />
+              </div>
+              <button id="btn-agregar-voto" type="button" class="btn-secundario flex-1 sm:flex-none">+ Agregar a la lista</button>
+            </div>
+
+            <!-- Lista dinámica de líneas partido + cantidad -->
+            <div class="mt-5 rounded-lg border border-dashed border-ink-200 bg-ink-50/60">
+              <ul id="lista-votos" class="divide-y divide-ink-100"></ul>
+              <p id="lista-vacia" class="px-4 py-5 text-center text-[13px] text-ink-400">
+                Todavía no hay votos agregados. Selecciona un partido, indica la cantidad y presiona “Agregar”.
+              </p>
+              <div id="fila-total" class="hidden items-center justify-between border-t border-ink-200 px-4 py-2.5">
+                <span class="text-[13px] font-semibold text-ink-500">Total de la familia</span>
+                <span id="total-votos" class="font-display text-lg font-extrabold tabular-nums"></span>
+              </div>
+            </div>
+          </fieldset>
+        </div>
+
+        <!-- Guardar: barra fija abajo en móvil, botón normal en escritorio -->
+        <div class="fixed inset-x-0 bottom-0 z-10 border-t border-ink-100 bg-white/95 p-3 backdrop-blur md:static md:mt-5 md:border-0 md:bg-transparent md:p-0 md:backdrop-blur-0">
+          <div class="mx-auto max-w-2xl">
+            <button id="btn-guardar" type="button" class="btn-primario w-full">Guardar familia</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================================================================
+           SECCIÓN 2: DASHBOARD (solo Administrador)
+      =================================================================== -->
+      <section id="section-dashboard" class="hidden">
+
+        <div id="dash-aviso" class="mb-5 hidden rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] font-medium text-amber-800"></div>
+
+        <!-- Resumen -->
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div class="tarjeta p-4">
+            <p class="eyebrow">Familias censadas</p>
+            <p id="card-familias" class="mt-1 font-display text-3xl font-extrabold tabular-nums">—</p>
+          </div>
+          <div class="tarjeta p-4">
+            <p class="eyebrow">Votos registrados</p>
+            <p id="card-votos" class="mt-1 font-display text-3xl font-extrabold tabular-nums">—</p>
+          </div>
+          <div class="tarjeta p-4">
+            <p class="eyebrow">Partido líder</p>
+            <p id="card-lider" class="mt-1 flex items-center gap-2 font-display text-3xl font-extrabold">—</p>
+          </div>
+        </div>
+
+        <!-- Filtros -->
+        <div class="tarjeta mt-5 p-4">
+          <div class="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_1fr_auto_auto] md:items-end">
+            <div>
+              <label for="f-partido" class="etiqueta">Partido</label>
+              <select id="f-partido" class="campo"></select>
+            </div>
+            <div>
+              <label for="f-departamento" class="etiqueta">Departamento</label>
+              <select id="f-departamento" class="campo"></select>
+            </div>
+            <div>
+              <label for="f-municipio" class="etiqueta">Municipio</label>
+              <select id="f-municipio" class="campo"></select>
+            </div>
+            <button id="btn-refrescar" class="btn-secundario">Actualizar datos</button>
+            <button id="btn-exportar" class="btn-primario !py-2.5">Exportar a Excel</button>
+          </div>
+        </div>
+
+        <!-- Gráficas -->
+        <div class="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
+          <div class="tarjeta p-5">
+            <h2 id="titulo-chart-partidos" class="font-display text-[15px] font-bold">Votos por partido</h2>
+            <div class="mt-4 h-72"><canvas id="chart-partidos"></canvas></div>
+          </div>
+          <div class="tarjeta p-5">
+            <h2 id="titulo-chart-ubicacion" class="font-display text-[15px] font-bold">Votos por municipio</h2>
+            <div class="mt-4 h-72"><canvas id="chart-ubicacion"></canvas></div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="border-t border-ink-100 py-4 text-center text-[12px] text-ink-400">
+      <!-- ⚠️ CAMBIAR: nombre real de la app -->
+      CensoGT · Soluciones Digitales GT
+    </footer>
+  </div>
+
+  <!-- Notificaciones -->
+  <div id="toast" class="pointer-events-none fixed inset-x-0 bottom-20 z-50 flex justify-center px-4 md:bottom-8">
+    <div id="toast-box" class="hidden max-w-md rounded-lg px-4 py-3 text-[14px] font-semibold text-white shadow-lg"></div>
+  </div>
+</body>
+</html>
