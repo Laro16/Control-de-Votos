@@ -4,13 +4,13 @@
 // descarguen la app nueva (si no, seguirán viendo la versión cacheada).
 // ============================================================================
 
-const VERSION = 'censo-v2';
+const VERSION = 'censo-v4';
 
 const APP_SHELL = [
   './',
   './index.html',
   './manifest.json',
-  './css/tailwind.css',
+  './tailwind.css',
   './js/configData.js',
   './js/supabaseClient.js',
   './js/app.js',
@@ -66,8 +66,11 @@ self.addEventListener('fetch', (e) => {
     caches.match(req).then((enCache) => {
       if (enCache) return enCache;
       return fetch(req).then((resp) => {
-        const copia = resp.clone();
-        caches.open(VERSION).then((cache) => cache.put(req, copia));
+        // Solo se cachean respuestas exitosas: un 404 cacheado se serviría para siempre
+        if (resp.ok) {
+          const copia = resp.clone();
+          caches.open(VERSION).then((cache) => cache.put(req, copia));
+        }
         return resp;
       });
     })
