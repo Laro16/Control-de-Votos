@@ -4,12 +4,13 @@
 // descarguen la app nueva (si no, seguirán viendo la versión cacheada).
 // ============================================================================
 
-const VERSION = 'censo-v1';
+const VERSION = 'censo-v2';
 
 const APP_SHELL = [
   './',
   './index.html',
   './manifest.json',
+  './css/tailwind.css',
   './js/configData.js',
   './js/supabaseClient.js',
   './js/app.js',

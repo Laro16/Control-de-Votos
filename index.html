@@ -19,37 +19,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
 
-  <!-- Tailwind CSS (CDN, según requerimiento del proyecto) -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            ink:   { 900: '#111826', 800: '#1D2432', 700: '#2A3244', 500: '#5A6376', 400: '#7C8496', 200: '#D9DDE4', 100: '#E9EBEF', 50: '#F4F5F7' },
-          },
-          fontFamily: {
-            display: ['Archivo', 'system-ui', 'sans-serif'],
-            sans: ['Inter', 'system-ui', 'sans-serif'],
-          },
-        },
-      },
-    };
-  </script>
-  <style type="text/tailwindcss">
-    @layer base {
-      html { -webkit-tap-highlight-color: transparent; }
-      select, input { @apply outline-none; }
-    }
-    @layer components {
-      .campo { @apply w-full rounded-lg border border-ink-200 bg-white px-3 py-2.5 text-[15px] text-ink-900 focus:border-ink-700 focus:ring-2 focus:ring-ink-200 disabled:bg-ink-100 disabled:text-ink-400; }
-      .etiqueta { @apply mb-1 block text-[13px] font-medium text-ink-500; }
-      .eyebrow { @apply font-display text-[11px] font-bold uppercase tracking-[0.14em] text-ink-400; }
-      .btn-primario { @apply inline-flex items-center justify-center gap-2 rounded-lg bg-ink-900 px-4 py-3 font-display text-[15px] font-bold text-white transition hover:bg-ink-700 focus-visible:ring-2 focus-visible:ring-ink-400 focus-visible:ring-offset-2 disabled:opacity-50; }
-      .btn-secundario { @apply inline-flex items-center justify-center gap-2 rounded-lg border border-ink-200 bg-white px-4 py-2.5 text-[14px] font-semibold text-ink-700 transition hover:border-ink-400 focus-visible:ring-2 focus-visible:ring-ink-300; }
-      .tarjeta { @apply rounded-xl border border-ink-100 bg-white shadow-sm; }
-    }
-  </style>
+  <!-- Tailwind CSS ya compilado (estático — no depende de ningún CDN).
+       Si se agregan clases nuevas en el HTML o en js/, hay que regenerar
+       css/tailwind.css (ver nota en README). -->
+  <link rel="stylesheet" href="css/tailwind.css" />
 
   <!-- Librerías (CDN) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
