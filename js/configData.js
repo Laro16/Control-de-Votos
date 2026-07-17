@@ -21,18 +21,17 @@ const PARTIDOS = [
 // --- UBICACIONES (filas planas, igual que el Excel) -------------------------
 // Cada fila = una combinación geográfica válida. Los <select> del formulario
 // se llenan en cascada filtrando estas filas.
-// Deja '' (vacío) cuando el nivel no aplique:
-//   · zona urbana  → aldea:'' y caserio:'', con barrio lleno
-//   · zona rural   → barrio:'', con aldea (y caserío si existe) llenos
+// "comunidad" es el tercer nivel genérico: aldea, caserío, barrio, colonia,
+// cantón, zona… lo que use cada municipio. Deja '' si la familia se registra
+// solo a nivel de municipio (p. ej. cabecera sin detalle).
 const UBICACIONES = [
   // — Datos de ejemplo (reemplazar con los reales desde el Excel) —
-  { departamento: 'Huehuetenango',  municipio: 'Huehuetenango',  aldea: '',             caserio: '',               barrio: 'Zona 1' },
-  { departamento: 'Huehuetenango',  municipio: 'Huehuetenango',  aldea: '',             caserio: '',               barrio: 'Zona 3' },
-  { departamento: 'Huehuetenango',  municipio: 'Huehuetenango',  aldea: 'Chinacá',      caserio: 'Los Regadillos', barrio: '' },
-  { departamento: 'Huehuetenango',  municipio: 'Chiantla',       aldea: 'Buenos Aires', caserio: 'El Mirador',     barrio: '' },
-  { departamento: 'Huehuetenango',  municipio: 'Chiantla',       aldea: 'Buenos Aires', caserio: 'La Cumbre',      barrio: '' },
-  { departamento: 'Quetzaltenango', municipio: 'Quetzaltenango', aldea: '',             caserio: '',               barrio: 'Zona 1' },
-  { departamento: 'Quetzaltenango', municipio: 'Salcajá',        aldea: '',             caserio: '',               barrio: 'San Jacinto' },
-  { departamento: 'Guatemala',      municipio: 'Guatemala',      aldea: '',             caserio: '',               barrio: 'Zona 10' },
-  { departamento: 'Guatemala',      municipio: 'Mixco',          aldea: '',             caserio: '',               barrio: 'Zona 1 de Mixco' },
+  { departamento: 'Huehuetenango',  municipio: 'Huehuetenango',  comunidad: 'Zona 1' },
+  { departamento: 'Huehuetenango',  municipio: 'Huehuetenango',  comunidad: 'Chinacá' },
+  { departamento: 'Huehuetenango',  municipio: 'Chiantla',       comunidad: 'Buenos Aires' },
+  { departamento: 'Huehuetenango',  municipio: 'Chiantla',       comunidad: 'El Mirador' },
+  { departamento: 'Quetzaltenango', municipio: 'Quetzaltenango', comunidad: 'Zona 1' },
+  { departamento: 'Quetzaltenango', municipio: 'Salcajá',        comunidad: 'San Jacinto' },
+  { departamento: 'Guatemala',      municipio: 'Guatemala',      comunidad: 'Zona 10' },
+  { departamento: 'Guatemala',      municipio: 'Mixco',          comunidad: '' },
 ];

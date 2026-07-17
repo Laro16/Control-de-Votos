@@ -126,8 +126,6 @@ const uniq = (arr) =>
   [...new Set(arr)].filter(Boolean).sort((a, b) => a.localeCompare(b, 'es'));
 
 // Valores únicos de un campo, filtrando por los niveles superiores ya elegidos.
-// El filtro compara con exactitud, incluyendo '' (por eso una zona urbana con
-// aldea:'' sí ofrece sus barrios cuando no se elige aldea).
 function opcionesUbicacion(campo, filtro) {
   return uniq(
     UBICACIONES
@@ -154,9 +152,7 @@ function llenarSelect(el, valores, { obligatorio = false } = {}) {
 const ubicacionActual = () => ({
   departamento: $('#sel-departamento').value,
   municipio: $('#sel-municipio').value,
-  aldea: $('#sel-aldea').value,
-  caserio: $('#sel-caserio').value,
-  barrio: $('#sel-barrio').value,
+  comunidad: $('#sel-comunidad').value,
 });
 
 function initUbicacion() {
@@ -164,29 +160,17 @@ function initUbicacion() {
   actualizarMunicipios();
 
   $('#sel-departamento').addEventListener('change', actualizarMunicipios);
-  $('#sel-municipio').addEventListener('change', actualizarAldeas);
-  $('#sel-aldea').addEventListener('change', actualizarCaserios);
-  $('#sel-caserio').addEventListener('change', actualizarBarrios);
+  $('#sel-municipio').addEventListener('change', actualizarComunidades);
 }
 
 function actualizarMunicipios() {
   const { departamento } = ubicacionActual();
   llenarSelect($('#sel-municipio'), opcionesUbicacion('municipio', { departamento }), { obligatorio: true });
-  actualizarAldeas();
+  actualizarComunidades();
 }
-function actualizarAldeas() {
+function actualizarComunidades() {
   const { departamento, municipio } = ubicacionActual();
-  llenarSelect($('#sel-aldea'), opcionesUbicacion('aldea', { departamento, municipio }));
-  actualizarCaserios();
-}
-function actualizarCaserios() {
-  const { departamento, municipio, aldea } = ubicacionActual();
-  llenarSelect($('#sel-caserio'), opcionesUbicacion('caserio', { departamento, municipio, aldea }));
-  actualizarBarrios();
-}
-function actualizarBarrios() {
-  const { departamento, municipio, aldea, caserio } = ubicacionActual();
-  llenarSelect($('#sel-barrio'), opcionesUbicacion('barrio', { departamento, municipio, aldea, caserio }));
+  llenarSelect($('#sel-comunidad'), opcionesUbicacion('comunidad', { departamento, municipio }));
 }
 
 // ============================================================================
@@ -310,8 +294,8 @@ async function guardarFamilia() {
     if (error) throw error;
 
     toast('Familia registrada correctamente.');
-    // Se conserva la ubicación: el digitador sigue casa por casa en el
-    // mismo caserío sin volver a seleccionar todo. Solo se limpia la familia.
+    // Se conserva la ubicación: el digitador sigue casa por casa en la
+    // misma comunidad sin volver a seleccionar todo. Solo se limpia la familia.
     $('#inp-familia').value = '';
     $('#inp-telefono').value = '';
     votosFamilia = [];
