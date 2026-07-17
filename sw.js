@@ -4,7 +4,7 @@
 // descarguen la app nueva (si no, seguirán viendo la versión cacheada).
 // ============================================================================
 
-const VERSION = 'censo-v4';
+const VERSION = 'censo-v5';
 
 const APP_SHELL = [
   './',
