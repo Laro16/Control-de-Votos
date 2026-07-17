@@ -13,9 +13,9 @@
 const USERS = {
   digitador: { password: 'digitador2026', role: 'digitador' },
   admin: {
-    password: 'admin2026',        // ⚠️ CAMBIAR (misma clave que en Supabase Auth)
+    password: 'Sinfonia-123',        // ⚠️ CAMBIAR (misma clave que en Supabase Auth)
     role: 'admin',
-    email: 'admin@censo.app',     // ⚠️ CAMBIAR (mismo correo que en Supabase Auth)
+    email: 'luis21aro@gmail.com',     // ⚠️ CAMBIAR (mismo correo que en Supabase Auth)
   },
 };
 
