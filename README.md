@@ -9,6 +9,9 @@ censo-politico/
 ├── index.html            → login + vistas por rol (ingreso / dashboard)
 ├── manifest.json         → PWA (cambiar nombre e íconos)
 ├── sw.js                 → service worker (subir VERSION en cada deploy)
+├── tailwind.css          → Tailwind YA COMPILADO (esto carga el navegador)
+├── input.css             → fuente de la compilación (no se carga)
+├── tailwind.config.js    → config de la compilación (no se carga)
 ├── js/
 │   ├── configData.js     → PARTIDOS y UBICACIONES (llenar desde el Excel)
 │   ├── supabaseClient.js → URL y anon key del proyecto (cambiar)
@@ -21,33 +24,35 @@ censo-politico/
 ## Puesta en marcha (una sola vez)
 
 1. **Crear proyecto** en supabase.com → New project.
-2. **SQL Editor** → New query → pegar TODO el contenido de `sql/setup.sql` → Run.
-3. **Crear el usuario del dashboard**: Authentication → Users → *Add user* →
-   correo `admin@censo.app`, contraseña `admin2026` (o los valores que pongas
-   en `js/app.js` → `USERS.admin`), marcar **Auto Confirm User**.
-   *Es el único paso que no va por SQL: crear usuarios de Auth insertando en
-   `auth.users` se rompe entre versiones de GoTrue, así que se hace en la UI.*
-4. **Project Settings → API**: copiar *Project URL* y *anon public key* a
+2. **SQL Editor** → New query → pegar los bloques 0–4 de `sql/setup.sql` → Run.
+3. **Crear los usuarios reales**: Authentication → Users → *Add user*, uno por
+   persona (ej. `digitador1@censo.app`, `admin@censo.app`), cada uno con su
+   contraseña y **Auto Confirm User** marcado. Los correos no necesitan
+   existir de verdad; el dominio debe coincidir con `LOGIN_DOMAIN` en
+   `js/app.js` para que en el login baste escribir `digitador1`.
+4. **Dar rol de admin**: ejecutar el BLOQUE 5 de `sql/setup.sql` (consulta
+   nueva) con el correo del administrador. Quien no tenga rol entra como
+   Digitador.
+5. **Project Settings → API**: copiar *Project URL* y *anon public key* a
    `js/supabaseClient.js`.
-5. **Cambiar credenciales** en `js/app.js` (no dejar las de ejemplo) y los
-   marcadores `⚠️ CAMBIAR` de nombre/logo en `index.html` y `manifest.json`.
 6. Subir la carpeta a un repo de GitHub → Vercel → *Import Project* → Deploy
    (framework: *Other*, sin build command). El service worker requiere HTTPS,
    que Vercel ya da.
 
 ## Seguridad — leer antes de entregar al cliente
 
-- Las credenciales del login están **hardcodeadas en `app.js` por requerimiento
-  del proyecto**: cualquiera que abra el código fuente puede leerlas. Solo
-  controlan qué pantallas se muestran.
-- La protección real está en la base: las tablas tienen RLS sin políticas de
-  escritura (solo se inserta vía la función `registrar_familia`) y **la lectura
-  exige sesión autenticada**. Sin eso, cualquiera con la anon key podría
-  descargar el censo completo por la API REST.
-- Riesgo residual: la clave del admin también viaja en el JS. Cuando el cliente
-  lo acepte, el paso definitivo es que el admin escriba su contraseña en el
-  login (se elimina `USERS.admin.password` y se pasa lo tecleado a
-  `signInWithPassword`): cambio de ~5 líneas.
+- **No hay contraseñas en el código.** Todas viven en Supabase Auth; el login
+  de la app es un login real (`signInWithPassword`).
+- La URL y la *anon key* de `js/supabaseClient.js` **sí son visibles** en el
+  navegador — es inevitable y es su diseño: la anon key es pública. La
+  protección no depende de esconderla, sino del RLS:
+  - **Escribir** exige sesión iniciada (la anon key sola no inserta nada).
+  - **Leer** exige además el rol `admin` dentro del token, que solo se asigna
+    por SQL (BLOQUE 5). Un digitador logueado tampoco puede descargar el censo.
+- `registrado_por` lo pone el servidor con el correo de la sesión: auditoría
+  real de quién capturó cada familia, imposible de falsificar desde la app.
+- Para dar de baja a alguien (p. ej. un digitador que deja la campaña):
+  Authentication → Users → borrar el usuario. Nada que redeployar.
 
 ## Datos sensibles
 
@@ -63,5 +68,8 @@ cerrar la campaña** (el `truncate` está comentado al final de `setup.sql`).
   la plantilla Excel).
 - Cada deploy con cambios: subir `VERSION` en `sw.js` para que los teléfonos
   actualicen.
-- Tailwind por CDN muestra un aviso de consola ("not for production"): es
-  esperado con este stack; funciona igual.
+- El CSS de Tailwind está **precompilado** en `tailwind.css` (en la raíz) (no se usa el
+  CDN de runtime, que resultó poco confiable). Si se agregan clases de Tailwind
+  nuevas en `index.html` o en `js/`, hay que regenerarlo:
+  `npx tailwindcss -i input.css -o tailwind.css --minify`
+  (o pedirle a Claude el archivo regenerado junto con el cambio).
