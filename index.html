@@ -120,9 +120,22 @@
                 <label for="sel-municipio" class="etiqueta">Municipio *</label>
                 <select id="sel-municipio" class="campo" required></select>
               </div>
-              <div class="sm:col-span-2">
-                <label for="sel-comunidad" class="etiqueta">Comunidad</label>
-                <select id="sel-comunidad" class="campo"></select>
+              <div>
+                <label for="inp-comunidad" class="etiqueta">Comunidad</label>
+                <input id="inp-comunidad" type="text" class="campo" list="dl-comunidad" autocomplete="off" />
+                <datalist id="dl-comunidad"></datalist>
+              </div>
+              <div>
+                <label for="inp-caserio" class="etiqueta">Caserío</label>
+                <input id="inp-caserio" type="text" class="campo" autocomplete="off" />
+              </div>
+              <div>
+                <label for="inp-barrio" class="etiqueta">Barrio / Colonia / Zona</label>
+                <input id="inp-barrio" type="text" class="campo" autocomplete="off" />
+              </div>
+              <div>
+                <label for="inp-direccion" class="etiqueta">Dirección específica</label>
+                <input id="inp-direccion" type="text" class="campo" autocomplete="off" placeholder="Ej. 3a calle 4-25" />
               </div>
             </div>
           </fieldset>
