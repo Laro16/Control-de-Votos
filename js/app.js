@@ -141,7 +141,10 @@ function llenarSelect(el, valores, { obligatorio = false } = {}) {
 const ubicacionActual = () => ({
   departamento: $('#sel-departamento').value,
   municipio: $('#sel-municipio').value,
-  comunidad: $('#sel-comunidad').value,
+  comunidad: $('#inp-comunidad').value.trim(),
+  caserio: $('#inp-caserio').value.trim(),
+  barrio: $('#inp-barrio').value.trim(),
+  direccion: $('#inp-direccion').value.trim(),
 });
 
 function initUbicacion() {
@@ -149,17 +152,37 @@ function initUbicacion() {
   actualizarMunicipios();
 
   $('#sel-departamento').addEventListener('change', actualizarMunicipios);
-  $('#sel-municipio').addEventListener('change', actualizarComunidades);
+  $('#sel-municipio').addEventListener('change', () => {
+    limpiarDetalleUbicacion();
+    actualizarSugerencias();
+  });
 }
 
 function actualizarMunicipios() {
   const { departamento } = ubicacionActual();
   llenarSelect($('#sel-municipio'), opcionesUbicacion('municipio', { departamento }), { obligatorio: true });
-  actualizarComunidades();
+  limpiarDetalleUbicacion();
+  actualizarSugerencias();
 }
-function actualizarComunidades() {
+
+// La columna "Comunidad" del Excel alimenta SUGERENCIAS para escribir menos
+// y con la misma ortografía; si un lugar no está en la lista, se escribe
+// igual y no bloquea nada.
+function actualizarSugerencias() {
   const { departamento, municipio } = ubicacionActual();
-  llenarSelect($('#sel-comunidad'), opcionesUbicacion('comunidad', { departamento, municipio }));
+  const dl = $('#dl-comunidad');
+  dl.innerHTML = '';
+  opcionesUbicacion('comunidad', { departamento, municipio }).forEach((v) => {
+    const op = document.createElement('option');
+    op.value = v;
+    dl.appendChild(op);
+  });
+}
+
+// Al cambiar de municipio, los nombres de lugar anteriores ya no aplican.
+function limpiarDetalleUbicacion() {
+  ['#inp-comunidad', '#inp-caserio', '#inp-barrio', '#inp-direccion']
+    .forEach((sel) => { $(sel).value = ''; });
 }
 
 // ============================================================================
@@ -284,8 +307,9 @@ async function guardarFamilia() {
     if (error) throw error;
 
     toast('Familia registrada correctamente.');
-    // Se conserva la ubicación: el digitador sigue casa por casa en la
-    // misma comunidad sin volver a seleccionar todo. Solo se limpia la familia.
+    // Se conserva depto/municipio/comunidad/caserío/barrio: el digitador sigue
+    // casa por casa en el mismo lugar. La dirección es de CADA casa → se limpia.
+    $('#inp-direccion').value = '';
     $('#inp-familia').value = '';
     $('#inp-telefono').value = '';
     votosFamilia = [];

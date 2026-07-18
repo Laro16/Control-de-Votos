@@ -193,10 +193,10 @@ function pintarChartUbicacion() {
   if (partido) filas = filas.filter((r) => r.partido === partido);
 
   // Nivel de agrupación: sin filtros → departamento; con departamento →
-  // municipio; con municipio → comunidad.
+  // municipio; con municipio → comunidad (o caserío/barrio si no se llenó).
   let fnClave, nivel;
   if (mun) {
-    fnClave = (r) => r.comunidad || 'Cabecera / sin detalle';
+    fnClave = (r) => r.comunidad || r.caserio || r.barrio || 'Sin detalle';
     nivel = 'comunidad';
   } else if (dep) {
     fnClave = (r) => r.municipio;
@@ -250,6 +250,9 @@ function exportarExcel() {
     'Departamento': r.departamento,
     'Municipio': r.municipio,
     'Comunidad': r.comunidad || '',
+    'Caserío': r.caserio || '',
+    'Barrio': r.barrio || '',
+    'Dirección': r.direccion || '',
     'Familia': r.nombre_familia,
     'Teléfono': r.telefono || '',
     'Partido': r.partido,
