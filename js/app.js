@@ -1,23 +1,16 @@
 // ============================================================================
-// APP.JS — login, navegación por rol y formulario de ingreso
+// APP.JS — login (Supabase Auth), navegación por rol y formulario de ingreso
 // ============================================================================
 
-// --- 1. CREDENCIALES (requerimiento estricto del proyecto) ------------------
-// ⚠️ LEER: estas credenciales SOLO controlan qué pantallas se muestran.
-// Cualquier persona que abra el código fuente del sitio puede leerlas.
-// La protección real de los datos está en Supabase (sql/setup.sql):
-//   · sin sesión autenticada NO se puede leer nada de la base;
-//   · la única escritura posible es la función registrar_familia().
-// La contraseña de 'admin' debe coincidir con el usuario creado en
-// Supabase → Authentication → Users (ver README, paso 3).
-const USERS = {
-  digitador: { password: 'digitador2026', role: 'digitador' },
-  admin: {
-    password: 'Sinfonia-123',        // ⚠️ CAMBIAR (misma clave que en Supabase Auth)
-    role: 'admin',
-    email: 'luis21aro@gmail.com',     // ⚠️ CAMBIAR (mismo correo que en Supabase Auth)
-  },
-};
+// --- 1. AUTENTICACIÓN --------------------------------------------------------
+// Ya NO hay credenciales en el código. Todos los usuarios (digitadores y
+// administradores) se crean en Supabase → Authentication → Users, y el rol
+// de administrador se asigna con el BLOQUE 5 de sql/setup.sql.
+// Quien no tiene rol asignado entra como Digitador (solo ingreso de datos).
+//
+// Comodidad para el login: si el usuario escribe sin '@', se le agrega este
+// dominio automáticamente (escriben "digitador1" → digitador1@censo.app).
+const LOGIN_DOMAIN = 'censo.app';   // ⚠️ mismo dominio de los correos creados en Auth
 
 // --- Estado global ----------------------------------------------------------
 let currentUser = null;        // { username, role }
@@ -42,41 +35,37 @@ function toast(mensaje, tipo = 'ok') {
 // 2. LOGIN / LOGOUT / SESIÓN
 // ============================================================================
 
-function login(e) {
+async function login(e) {
   e.preventDefault();
-  const usuario = $('#login-user').value.trim().toLowerCase();
+  const escrito = $('#login-user').value.trim().toLowerCase();
   const clave = $('#login-pass').value;
-  const registro = USERS[usuario];
+  const email = escrito.includes('@') ? escrito : `${escrito}@${LOGIN_DOMAIN}`;
 
   const errorEl = $('#login-error');
-  if (!registro || registro.password !== clave) {
+  errorEl.classList.add('hidden');
+
+  const { data, error } = await sb.auth.signInWithPassword({ email, password: clave });
+  if (error) {
     errorEl.textContent = 'Usuario o contraseña incorrectos.';
     errorEl.classList.remove('hidden');
     return;
   }
 
-  errorEl.classList.add('hidden');
-  currentUser = { username: usuario, role: registro.role };
-  sessionStorage.setItem('censo_user', JSON.stringify(currentUser));
+  currentUser = usuarioDesdeSesion(data.session);
   mostrarApp();
 }
 
-function logout() {
-  sessionStorage.removeItem('censo_user');
-  sb.auth.signOut().finally(() => location.reload());
+// El rol viaja DENTRO del token de sesión (app_metadata), asignado desde SQL.
+// app_metadata solo puede modificarse desde el servidor: nadie puede volverse
+// admin editando el código en su navegador.
+function usuarioDesdeSesion(session) {
+  const u = session.user;
+  const rol = (u.app_metadata && u.app_metadata.role) === 'admin' ? 'admin' : 'digitador';
+  return { username: (u.email || '').split('@')[0], role: rol };
 }
 
-// El dashboard necesita una sesión REAL de Supabase para poder leer datos.
-// Se inicia sesión con la cuenta única de Auth solo cuando el admin entra.
-async function ensureAdminSession() {
-  const { data } = await sb.auth.getSession();
-  if (data && data.session) return { ok: true };
-  const { error } = await sb.auth.signInWithPassword({
-    email: USERS.admin.email,
-    password: USERS.admin.password,
-  });
-  if (error) return { ok: false, mensaje: error.message };
-  return { ok: true };
+function logout() {
+  sb.auth.signOut().finally(() => location.reload());
 }
 
 function mostrarApp() {
@@ -86,7 +75,7 @@ function mostrarApp() {
   app.classList.add('flex');
 
   $('#user-chip').textContent =
-    currentUser.role === 'admin' ? 'Administrador' : 'Digitador';
+    `${currentUser.username} · ${currentUser.role === 'admin' ? 'Administrador' : 'Digitador'}`;
 
   // El tab de Dashboard solo existe para el admin
   if (currentUser.role === 'admin') $('#tab-dashboard').classList.remove('hidden');
@@ -281,7 +270,8 @@ async function guardarFamilia() {
     ...u,
     nombre_familia: nombre,
     telefono,
-    registrado_por: currentUser ? currentUser.username : null,
+    // registrado_por ya no se envía: el servidor lo toma del correo de la
+    // sesión (no se puede falsificar desde el navegador).
     votos: votosFamilia.map((v) => ({ partido: v.partidoId, cantidad: v.cantidad })),
   };
 
@@ -327,15 +317,14 @@ function init() {
   renderChipsPartidos();
   renderListaVotos();
 
-  // Restaurar sesión de la pestaña (se pierde al cerrar el navegador)
-  const guardado = sessionStorage.getItem('censo_user');
-  if (guardado) {
-    try {
-      currentUser = JSON.parse(guardado);
-      if (currentUser && USERS[currentUser.username]) mostrarApp();
-      else currentUser = null;
-    } catch (_) { currentUser = null; }
-  }
+  // Restaurar la sesión que Supabase guarda en el dispositivo:
+  // el digitador no tiene que volver a loguearse cada vez que abre la app.
+  sb.auth.getSession().then(({ data }) => {
+    if (data && data.session) {
+      currentUser = usuarioDesdeSesion(data.session);
+      mostrarApp();
+    }
+  });
 
   // PWA: registrar el service worker
   if ('serviceWorker' in navigator) {

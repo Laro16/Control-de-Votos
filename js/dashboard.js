@@ -28,12 +28,17 @@ async function initDashboard(forzar = false) {
   const aviso = document.querySelector('#dash-aviso');
   aviso.classList.add('hidden');
 
-  // 1) Sesión real de Supabase (sin ella, el RLS bloquea toda lectura)
-  const sesion = await ensureAdminSession();
-  if (!sesion.ok) {
+  // 1) Sesión con rol de administrador. El RLS del servidor bloquea la
+  //    lectura a cualquier otro rol; esta verificación solo sirve para dar
+  //    un mensaje claro en vez de una pantalla vacía.
+  const { data: sesionData } = await sb.auth.getSession();
+  const rol = sesionData && sesionData.session
+    ? (sesionData.session.user.app_metadata || {}).role
+    : null;
+  if (rol !== 'admin') {
     aviso.textContent =
-      'No se pudo iniciar la sesión del dashboard en Supabase (' + sesion.mensaje + '). ' +
-      'Verifica el paso 3 del README: crear el usuario en Authentication → Users con el mismo correo y contraseña que están en js/app.js.';
+      'Tu usuario no tiene rol de administrador. Asígnalo con el BLOQUE 5 de sql/setup.sql ' +
+      'y vuelve a cerrar y abrir sesión para que el permiso entre en vigor.';
     aviso.classList.remove('hidden');
     return;
   }
