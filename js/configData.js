@@ -1,8 +1,7 @@
 // ============================================================================
-// CONFIGURACIÓN DE DATOS — este es el archivo que vas a editar con datos reales
-// La estructura es idéntica a la plantilla Excel (plantilla_config_censo.xlsx):
-// llenas el Excel, y cada fila de la hoja "Ubicaciones" se convierte en un
-// objeto de UBICACIONES; cada fila de "Partidos" en un objeto de PARTIDOS.
+// CONFIGURACIÓN DE DATOS
+// Ubicaciones generadas del mapa municipal "Ubicación de Comunidades"
+// (Municipalidad de Tamahú, IUSI Catastro-Ortofotos-RIC, año 2021).
 // ============================================================================
 
 // --- PARTIDOS (6) -----------------------------------------------------------
@@ -18,20 +17,57 @@ const PARTIDOS = [
   { id: 'P6', nombre: 'Partido Seis (editar)',   sigla: 'P6', color: '#0891B2', logo: 'img/partidos/p6.png' },
 ];
 
-// --- UBICACIONES (filas planas, igual que el Excel) -------------------------
-// Cada fila = una combinación geográfica válida. Los <select> del formulario
-// se llenan en cascada filtrando estas filas.
-// "comunidad" es el tercer nivel genérico: aldea, caserío, barrio, colonia,
-// cantón, zona… lo que use cada municipio. Deja '' si la familia se registra
-// solo a nivel de municipio (p. ej. cabecera sin detalle).
+// --- UBICACIONES -------------------------------------------------------------
+// Censo de un solo municipio: Tamahú, Alta Verapaz. Los selects se eligen
+// solos al abrir la app (única opción). La columna "comunidad" alimenta las
+// SUGERENCIAS del campo Comunidad; si un lugar no aparece, se escribe libre.
+const D = 'Alta Verapaz';
+const M = 'Tamahú';
 const UBICACIONES = [
-  // — Datos de ejemplo (reemplazar con los reales desde el Excel) —
-  { departamento: 'Huehuetenango',  municipio: 'Huehuetenango',  comunidad: 'Zona 1' },
-  { departamento: 'Huehuetenango',  municipio: 'Huehuetenango',  comunidad: 'Chinacá' },
-  { departamento: 'Huehuetenango',  municipio: 'Chiantla',       comunidad: 'Buenos Aires' },
-  { departamento: 'Huehuetenango',  municipio: 'Chiantla',       comunidad: 'El Mirador' },
-  { departamento: 'Quetzaltenango', municipio: 'Quetzaltenango', comunidad: 'Zona 1' },
-  { departamento: 'Quetzaltenango', municipio: 'Salcajá',        comunidad: 'San Jacinto' },
-  { departamento: 'Guatemala',      municipio: 'Guatemala',      comunidad: 'Zona 10' },
-  { departamento: 'Guatemala',      municipio: 'Mixco',          comunidad: '' },
+  { departamento: D, municipio: M, comunidad: 'Cabecera municipal (Tamahú)' },
+
+  // Aldeas (según el mapa: símbolo de triángulo)
+  { departamento: D, municipio: M, comunidad: 'Sesarb' },
+  { departamento: D, municipio: M, comunidad: 'Sesarb II' },
+  { departamento: D, municipio: M, comunidad: 'Sequib' },
+  { departamento: D, municipio: M, comunidad: 'San Pablo Sesooch' },
+
+  // Caseríos
+  { departamento: D, municipio: M, comunidad: 'Arenal' },
+  { departamento: D, municipio: M, comunidad: 'Atipal' },
+  { departamento: D, municipio: M, comunidad: 'Cantilha' },
+  { departamento: D, municipio: M, comunidad: 'Caserío La Libertad' },
+  { departamento: D, municipio: M, comunidad: 'Caserío Pancoj' },
+  { departamento: D, municipio: M, comunidad: 'Catilhá' },
+  { departamento: D, municipio: M, comunidad: 'Chijicay' },
+  { departamento: D, municipio: M, comunidad: 'Chimulun' },
+  { departamento: D, municipio: M, comunidad: 'Chipocaj' },
+  { departamento: D, municipio: M, comunidad: 'Chiquin Guaxcux' },
+  { departamento: D, municipio: M, comunidad: 'Chitiulub' },
+  { departamento: D, municipio: M, comunidad: 'Comonhoj' },
+  { departamento: D, municipio: M, comunidad: 'Concepción de María' },
+  { departamento: D, municipio: M, comunidad: 'Eben Ezer II' },
+  { departamento: D, municipio: M, comunidad: 'El Mirador' },
+  { departamento: D, municipio: M, comunidad: 'Guaxaxul' },
+  { departamento: D, municipio: M, comunidad: 'Ixcamul' },
+  { departamento: D, municipio: M, comunidad: 'Jolomche' },
+  { departamento: D, municipio: M, comunidad: 'La Soledad' },
+  { departamento: D, municipio: M, comunidad: 'Nachuwá' },
+  { departamento: D, municipio: M, comunidad: 'Naxombal' },
+  { departamento: D, municipio: M, comunidad: 'Nueva Esperanza' },
+  { departamento: D, municipio: M, comunidad: 'Nuevo San Marcos' },
+  { departamento: D, municipio: M, comunidad: 'Orquilha' },
+  { departamento: D, municipio: M, comunidad: 'Pancox' },
+  { departamento: D, municipio: M, comunidad: 'Panhorna' },
+  { departamento: D, municipio: M, comunidad: 'Pansup' },
+  { departamento: D, municipio: M, comunidad: 'Pantic' },
+  { departamento: D, municipio: M, comunidad: 'Pantoón' },
+  { departamento: D, municipio: M, comunidad: 'Popabaj' },
+  { departamento: D, municipio: M, comunidad: 'San Francisco de Asis' },
+  { departamento: D, municipio: M, comunidad: 'Santa Ana' },
+  { departamento: D, municipio: M, comunidad: 'Sesarb Sechaj' },
+  { departamento: D, municipio: M, comunidad: 'Yuxilha' },
+
+  // En el mapa aparece al borde del perímetro, sobre la RN-7E (¿pertenece?)
+  { departamento: D, municipio: M, comunidad: 'Calera' },
 ];

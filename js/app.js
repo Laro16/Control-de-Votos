@@ -136,6 +136,9 @@ function llenarSelect(el, valores, { obligatorio = false } = {}) {
     el.appendChild(op);
   });
   el.disabled = obligatorio && valores.length === 0;
+  // Si solo existe una opción válida, se elige sola: en un censo de un solo
+  // municipio el digitador no tiene que tocar estos selects.
+  if (obligatorio && valores.length === 1) el.value = valores[0];
 }
 
 const ubicacionActual = () => ({
