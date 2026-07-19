@@ -258,7 +258,7 @@ function renderListaVotos() {
     const li = document.createElement('li');
     li.className = 'flex items-center gap-3 px-4 py-2.5';
     li.innerHTML = `
-      <span class="inline-flex h-7 w-12 items-center justify-center rounded-md text-[12px] font-extrabold text-white" style="background:${p.color}">${p.sigla}</span>
+      <span class="inline-flex h-7 min-w-[3rem] items-center justify-center rounded-md px-2 text-[12px] font-extrabold text-white" style="background:${p.color}">${p.sigla}</span>
       <span class="flex-1 truncate text-[14px]">${p.nombre}</span>
       <span class="font-display text-[15px] font-extrabold tabular-nums">${v.cantidad} ${v.cantidad === 1 ? 'voto' : 'votos'}</span>
       <button type="button" class="quitar-voto rounded p-1 text-ink-400 hover:bg-red-50 hover:text-red-600" aria-label="Quitar línea" data-indice="${i}">✕</button>`;

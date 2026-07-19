@@ -9,12 +9,12 @@
 // color    : se usa en las gráficas del dashboard y en las fichas del formulario
 // logo     : ruta del PNG dentro de img/partidos/ (reemplazar los placeholders)
 const PARTIDOS = [
-  { id: 'P1', nombre: 'Partido Uno (editar)',    sigla: 'P1', color: '#DC2626', logo: 'img/partidos/p1.png' },
-  { id: 'P2', nombre: 'Partido Dos (editar)',    sigla: 'P2', color: '#2563EB', logo: 'img/partidos/p2.png' },
-  { id: 'P3', nombre: 'Partido Tres (editar)',   sigla: 'P3', color: '#16A34A', logo: 'img/partidos/p3.png' },
-  { id: 'P4', nombre: 'Partido Cuatro (editar)', sigla: 'P4', color: '#D97706', logo: 'img/partidos/p4.png' },
-  { id: 'P5', nombre: 'Partido Cinco (editar)',  sigla: 'P5', color: '#7C3AED', logo: 'img/partidos/p5.png' },
-  { id: 'P6', nombre: 'Partido Seis (editar)',   sigla: 'P6', color: '#0891B2', logo: 'img/partidos/p6.png' },
+  { id: 'P1', nombre: 'Prosperidad Ciudadana', sigla: 'PC',       color: '#DC2626', logo: 'img/partidos/p1.png' },
+  { id: 'P2', nombre: 'Cabal',                 sigla: 'CABAL',    color: '#2563EB', logo: 'img/partidos/p2.png' },
+  { id: 'P3', nombre: 'Valor',                 sigla: 'VALOR',    color: '#16A34A', logo: 'img/partidos/p3.png' },
+  { id: 'P4', nombre: 'Victoria',              sigla: 'VICTORIA', color: '#D97706', logo: 'img/partidos/p4.png' },
+  { id: 'P5', nombre: 'UNE',                   sigla: 'UNE',      color: '#7C3AED', logo: 'img/partidos/p5.png' },
+  { id: 'P6', nombre: 'Elefante',              sigla: 'ELEFANTE', color: '#0891B2', logo: 'img/partidos/p6.png' },
 ];
 
 // --- UBICACIONES -------------------------------------------------------------
