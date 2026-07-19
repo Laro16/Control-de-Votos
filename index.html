@@ -27,7 +27,7 @@
   <!-- Librerías (CDN) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 
   <!-- Código de la app (el orden importa) -->
   <script defer src="js/configData.js"></script>
@@ -201,8 +201,20 @@
 
         <div id="dash-aviso" class="mb-5 hidden rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] font-medium text-amber-800"></div>
 
-        <!-- Resumen -->
-        <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <!-- Encabezado + acciones (separadas de los filtros) -->
+        <div class="mb-5 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 class="font-display text-xl font-extrabold tracking-tight">Panel de resultados</h2>
+            <p class="text-[13px] text-ink-500">Tamahú, Alta Verapaz</p>
+          </div>
+          <div class="flex gap-2">
+            <button id="btn-refrescar" class="btn-secundario">Actualizar</button>
+            <button id="btn-exportar" class="btn-primario">Exportar a Excel</button>
+          </div>
+        </div>
+
+        <!-- KPIs -->
+        <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <div class="tarjeta p-4">
             <p class="eyebrow">Familias censadas</p>
             <p id="card-familias" class="mt-1 font-display text-3xl font-extrabold tabular-nums">—</p>
@@ -212,28 +224,27 @@
             <p id="card-votos" class="mt-1 font-display text-3xl font-extrabold tabular-nums">—</p>
           </div>
           <div class="tarjeta p-4">
+            <p class="eyebrow">Comunidades</p>
+            <p id="card-comunidades" class="mt-1 font-display text-3xl font-extrabold tabular-nums">—</p>
+            <p id="card-comunidades-total" class="text-[12px] text-ink-400">comunidades</p>
+          </div>
+          <div class="tarjeta p-4">
             <p class="eyebrow">Partido líder</p>
-            <p id="card-lider" class="mt-1 flex items-center gap-2 font-display text-3xl font-extrabold">—</p>
+            <p id="card-lider" class="mt-1 truncate font-display text-2xl font-extrabold leading-tight">—</p>
           </div>
         </div>
 
-        <!-- Filtros -->
+        <!-- Filtros (solo filtros) -->
         <div class="tarjeta mt-5 p-4">
-          <div class="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_1fr_auto_auto] md:items-end">
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label for="f-partido" class="etiqueta">Partido</label>
               <select id="f-partido" class="campo"></select>
             </div>
             <div>
-              <label for="f-departamento" class="etiqueta">Departamento</label>
-              <select id="f-departamento" class="campo"></select>
+              <label for="f-comunidad" class="etiqueta">Comunidad</label>
+              <select id="f-comunidad" class="campo"></select>
             </div>
-            <div>
-              <label for="f-municipio" class="etiqueta">Municipio</label>
-              <select id="f-municipio" class="campo"></select>
-            </div>
-            <button id="btn-refrescar" class="btn-secundario">Actualizar datos</button>
-            <button id="btn-exportar" class="btn-primario !py-2.5">Exportar a Excel</button>
           </div>
         </div>
 
@@ -244,8 +255,8 @@
             <div class="mt-4 h-72"><canvas id="chart-partidos"></canvas></div>
           </div>
           <div class="tarjeta p-5">
-            <h2 id="titulo-chart-ubicacion" class="font-display text-[15px] font-bold">Votos por municipio</h2>
-            <div class="mt-4 h-72"><canvas id="chart-ubicacion"></canvas></div>
+            <h2 id="titulo-chart-comunidad" class="font-display text-[15px] font-bold">Votos por comunidad</h2>
+            <div class="mt-4 h-72"><canvas id="chart-comunidad"></canvas></div>
           </div>
         </div>
       </section>

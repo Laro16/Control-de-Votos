@@ -1,6 +1,6 @@
-/** Config usada para COMPILAR css/tailwind.css (no se carga en el navegador).
+/** Config usada para COMPILAR tailwind.css (en la RAÍZ del repo) (no se carga en el navegador).
  *  Si se agregan clases nuevas en index.html o js/, hay que recompilar:
- *  npx tailwindcss -i css/input.css -o css/tailwind.css --minify
+ *  npx tailwindcss -i input.css -o tailwind.css (en la RAÍZ del repo) --minify
  */
 module.exports = {
   content: ['./index.html', './js/*.js'],
