@@ -230,13 +230,16 @@
           </div>
           <div class="tarjeta p-4">
             <p class="eyebrow">Partido líder</p>
-            <p id="card-lider" class="mt-1 truncate font-display text-2xl font-extrabold leading-tight">—</p>
+            <div class="mt-1 flex items-center gap-2">
+              <img id="card-lider-logo" src="" alt="" class="hidden h-8 w-8 shrink-0 object-contain" />
+              <p id="card-lider" class="truncate font-display text-2xl font-extrabold leading-tight">—</p>
+            </div>
           </div>
         </div>
 
-        <!-- Filtros (solo filtros) -->
+        <!-- Filtros -->
         <div class="tarjeta mt-5 p-4">
-          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
             <div>
               <label for="f-partido" class="etiqueta">Partido</label>
               <select id="f-partido" class="campo"></select>
@@ -245,18 +248,24 @@
               <label for="f-comunidad" class="etiqueta">Comunidad</label>
               <select id="f-comunidad" class="campo"></select>
             </div>
+            <button id="btn-limpiar" class="btn-secundario">Limpiar</button>
           </div>
+          <p id="pista-filtros" class="mt-3 text-[12px] text-ink-400">
+            Toca cualquier barra de las gráficas para filtrar. Tócala otra vez para quitar el filtro.
+          </p>
         </div>
 
-        <!-- Gráficas -->
-        <div class="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <!-- Gráficas (barras, ancho completo) -->
+        <div class="mt-5 space-y-5">
           <div class="tarjeta p-5">
             <h2 id="titulo-chart-partidos" class="font-display text-[15px] font-bold">Votos por partido</h2>
-            <div class="mt-4 h-72"><canvas id="chart-partidos"></canvas></div>
+            <p class="mt-0.5 text-[12px] text-ink-400">Ordenado de mayor a menor</p>
+            <div class="mt-4 h-[300px]"><canvas id="chart-partidos"></canvas></div>
           </div>
           <div class="tarjeta p-5">
             <h2 id="titulo-chart-comunidad" class="font-display text-[15px] font-bold">Votos por comunidad</h2>
-            <div class="mt-4 h-72"><canvas id="chart-comunidad"></canvas></div>
+            <p id="sub-chart-comunidad" class="mt-0.5 text-[12px] text-ink-400">Las 12 con más votos</p>
+            <div class="mt-4 h-[440px]"><canvas id="chart-comunidad"></canvas></div>
           </div>
         </div>
       </section>
