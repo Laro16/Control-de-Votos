@@ -5,13 +5,14 @@
 // ============================================================================
 
 // --- PARTIDOS (6) -----------------------------------------------------------
-// id/sigla : se guarda en la base de datos (no cambiar después de tener datos)
+// id       : ES LA LLAVE EN LA BASE DE DATOS. NO CAMBIAR: los votos ya guardados
+//            se reasignarían solos a otro partido.
+// logo     : ruta del PNG dentro de img/partidos/ (esto sí se puede reacomodar libremente)
 // color    : se usa en las gráficas del dashboard y en las fichas del formulario
-// logo     : ruta del PNG dentro de img/partidos/ (reemplazar los placeholders)
 const PARTIDOS = [
   { id: 'P1', nombre: 'Prosperidad Ciudadana', sigla: 'PC',       color: '#DC2626', logo: 'img/partidos/p1.png' },
-  { id: 'P2', nombre: 'Cabal',                 sigla: 'CABAL',    color: '#2563EB', logo: 'img/partidos/p2.png' },
-  { id: 'P3', nombre: 'Valor',                 sigla: 'VALOR',    color: '#16A34A', logo: 'img/partidos/p3.png' },
+  { id: 'P2', nombre: 'Cabal',                 sigla: 'CABAL',    color: '#2563EB', logo: 'img/partidos/p3.png' },
+  { id: 'P3', nombre: 'Valor',                 sigla: 'VALOR',    color: '#16A34A', logo: 'img/partidos/p2.png' },
   { id: 'P4', nombre: 'Victoria',              sigla: 'VICTORIA', color: '#D97706', logo: 'img/partidos/p4.png' },
   { id: 'P5', nombre: 'UNE',                   sigla: 'UNE',      color: '#7C3AED', logo: 'img/partidos/p5.png' },
   { id: 'P6', nombre: 'Elefante',              sigla: 'ELEFANTE', color: '#0891B2', logo: 'img/partidos/p6.png' },

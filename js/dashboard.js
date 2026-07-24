@@ -78,6 +78,7 @@ async function initDashboard(forzar = false) {
 // --- Filtros -----------------------------------------------------------------
 
 function llenarFiltro(el, valores, etiquetaTodos) {
+  if (!el) return;                 // el HTML y el JS no coinciden (caché viejo)
   const previo = el.value;
   el.innerHTML = '';
   const todos = document.createElement('option');
@@ -110,12 +111,130 @@ function poblarFiltros() {
   llenarFiltro(document.querySelector('#f-comunidad'), comunidades, 'Todas las comunidades');
 }
 
-const partidoFiltro   = () => document.querySelector('#f-partido').value;
-const comunidadFiltro = () => document.querySelector('#f-comunidad').value;
+const valorDe = (sel) => {
+  const el = document.querySelector(sel);
+  return el ? el.value : '';
+};
+const partidoFiltro   = () => valorDe('#f-partido');
+const comunidadFiltro = () => valorDe('#f-comunidad');
 
 function filasPorComunidad() {
   const c = comunidadFiltro();
   return c ? censoRows.filter((r) => comunidadDe(r) === c) : censoRows;
+}
+
+// --- Logos de partido (precargados para poder dibujarlos en el canvas) ------
+
+const LOGOS = {};
+PARTIDOS.forEach((p) => {
+  const img = new Image();
+  img.src = p.logo;
+  // Si falta el PNG, la gráfica simplemente no dibuja icono (no se rompe nada).
+  img.onerror = () => { img.roto = true; };
+  LOGOS[p.id] = img;
+});
+const logoListo = (img) => img && !img.roto && img.complete && img.naturalWidth > 0;
+
+// --- Plugins de Chart.js ------------------------------------------------------
+
+// Fondo blanco: si no, al exportar a Excel la imagen sale transparente.
+const fondoBlanco = {
+  id: 'fondoBlanco',
+  beforeDraw(chart) {
+    const { ctx } = chart;
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-over';
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, chart.width, chart.height);
+    ctx.restore();
+  },
+};
+
+// Dibuja el logo del partido en el margen izquierdo, frente a su barra.
+const logosEnEje = {
+  id: 'logosEnEje',
+  afterDraw(chart) {
+    const claves = chart.$logoKeys;
+    if (!claves) return;
+    const eje = chart.scales.y;
+    const ctx = chart.ctx;
+    const tam = 22;
+    claves.forEach((clave, i) => {
+      const img = LOGOS[clave];
+      if (!logoListo(img)) return;
+      const y = eje.getPixelForTick(i);
+      if (y == null || Number.isNaN(y)) return;
+      ctx.drawImage(img, 4, y - tam / 2, tam, tam);
+    });
+  },
+};
+
+// Escribe el número (y el %) al final de cada barra.
+const valorEnBarra = {
+  id: 'valorEnBarra',
+  afterDatasetsDraw(chart) {
+    const total = chart.$total || 0;
+    const ctx = chart.ctx;
+    const meta = chart.getDatasetMeta(0);
+    ctx.save();
+    ctx.font = '600 12px Inter, Arial, sans-serif';
+    ctx.textBaseline = 'middle';
+    meta.data.forEach((barra, i) => {
+      const v = chart.data.datasets[0].data[i];
+      if (v == null) return;
+      const pct = total > 0 ? Math.round((v / total) * 100) : 0;
+      const texto = total > 0 ? `${v.toLocaleString('es-GT')}  (${pct}%)` : String(v);
+      const anchoTexto = ctx.measureText(texto).width;
+      const cabe = barra.x + 8 + anchoTexto < chart.chartArea.right;
+      ctx.fillStyle = cabe ? INK_900 : '#FFFFFF';
+      ctx.textAlign = cabe ? 'left' : 'right';
+      ctx.fillText(texto, cabe ? barra.x + 8 : barra.x - 8, barra.y);
+    });
+    ctx.restore();
+  },
+};
+
+// Opciones comunes a las dos gráficas de barras horizontales.
+function opcionesBarra({ total, alClic, etiquetaTooltip }) {
+  return {
+    indexAxis: 'y',
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: { duration: 300 },
+    onClick: alClic,
+    onHover: (e, els) => {
+      e.native.target.style.cursor = els.length ? 'pointer' : 'default';
+    },
+    layout: { padding: { right: 56 } },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: INK_900,
+        padding: 10,
+        displayColors: false,
+        titleFont: { family: 'Inter', size: 12 },
+        bodyFont: { family: 'Inter', size: 13, weight: '600' },
+        callbacks: {
+          label: (ctx) => {
+            const v = ctx.parsed.x;
+            const pct = total > 0 ? Math.round((v / total) * 100) : 0;
+            return `${v.toLocaleString('es-GT')} ${etiquetaTooltip} · ${pct}% del total`;
+          },
+        },
+      },
+    },
+    scales: {
+      x: {
+        beginAtZero: true,
+        ticks: { precision: 0, font: { family: 'Inter', size: 11 }, color: '#7C8496' },
+        grid: { color: '#EDEEF1', drawBorder: false },
+      },
+      y: {
+        ticks: { font: { family: 'Inter', size: 12, weight: '600' }, color: INK_900 },
+        grid: { display: false, drawBorder: false },
+      },
+    },
+  };
 }
 
 // --- Pintado general ----------------------------------------------------------
@@ -124,6 +243,22 @@ function pintarTodo() {
   pintarResumen();
   pintarChartPartidos();
   pintarChartComunidad();
+  actualizarPista();
+}
+
+function actualizarPista() {
+  const p = partidoFiltro();
+  const c = comunidadFiltro();
+  const pista = document.querySelector('#pista-filtros');
+  if (!p && !c) {
+    pista.textContent =
+      'Toca cualquier barra de las gráficas para filtrar. Tócala otra vez para quitar el filtro.';
+    return;
+  }
+  const partes = [];
+  if (p) partes.push(`Partido: ${nombrePartido(p)}`);
+  if (c) partes.push(`Comunidad: ${c}`);
+  pista.textContent = 'Mostrando → ' + partes.join('   ·   ');
 }
 
 function agrupar(filas, fnClave) {
@@ -147,9 +282,12 @@ function pintarResumen() {
   const porPartido = agrupar(filas, (r) => r.partido);
   let lider = '—';
   let colorLider = INK_900;
+  let siglaLider = null;
   if (votos > 0) {
     const [sigla] = [...porPartido.entries()].sort((a, b) => b[1] - a[1])[0];
-    lider = sigla;
+    siglaLider = sigla;
+    const p = PARTIDOS.find((x) => x.id === sigla);
+    lider = p ? p.nombre : sigla;
     colorLider = colorPartido(sigla);
   }
 
@@ -158,12 +296,23 @@ function pintarResumen() {
   document.querySelector('#card-comunidades').textContent = cubiertas.toLocaleString('es-GT');
   const totalEl = document.querySelector('#card-comunidades-total');
   if (totalEl) totalEl.textContent = TOTAL_COMUNIDADES ? `de ${TOTAL_COMUNIDADES} comunidades` : 'comunidades';
+
   const cardLider = document.querySelector('#card-lider');
   cardLider.textContent = lider;
   cardLider.style.color = colorLider;
+
+  const logoLider = document.querySelector('#card-lider-logo');
+  const pLider = siglaLider ? PARTIDOS.find((x) => x.id === siglaLider) : null;
+  if (pLider) {
+    logoLider.src = pLider.logo;
+    logoLider.classList.remove('hidden');
+    logoLider.onerror = () => logoLider.classList.add('hidden');
+  } else {
+    logoLider.classList.add('hidden');
+  }
 }
 
-// --- Gráfica A: reparto de votos por partido (en el ámbito filtrado) ---------
+// --- Gráfica A: votos por partido (barras horizontales, con logo) -------------
 
 function pintarChartPartidos() {
   const filas = filasPorComunidad();
@@ -171,32 +320,51 @@ function pintarChartPartidos() {
   document.querySelector('#titulo-chart-partidos').textContent = `Votos por partido · ${lugar}`;
 
   const porPartido = agrupar(filas, (r) => r.partido);
-  const siglas = PARTIDOS.map((p) => p.id).filter((s) => porPartido.has(s));
-  [...porPartido.keys()].forEach((s) => { if (!siglas.includes(s)) siglas.push(s); });
+  // Todos los partidos aparecen (aunque tengan 0), ordenados de mayor a menor.
+  const datos = PARTIDOS
+    .map((p) => ({ id: p.id, nombre: p.nombre, total: porPartido.get(p.id) || 0 }))
+    .sort((a, b) => b.total - a.total);
+
+  const total = datos.reduce((s, d) => s + d.total, 0);
+  const seleccionado = partidoFiltro();
 
   if (chartPartidos) chartPartidos.destroy();
   chartPartidos = new Chart(document.querySelector('#chart-partidos'), {
-    type: 'doughnut',
+    type: 'bar',
+    plugins: [fondoBlanco, logosEnEje, valorEnBarra],
     data: {
-      labels: siglas.map(nombrePartido),
+      labels: datos.map((d) => d.nombre),
       datasets: [{
-        data: siglas.map((s) => porPartido.get(s)),
-        backgroundColor: siglas.map(colorPartido),
-        borderColor: '#FFFFFF',
-        borderWidth: 2,
+        data: datos.map((d) => d.total),
+        backgroundColor: datos.map((d) =>
+          // Si hay un partido seleccionado, los demás se atenúan.
+          !seleccionado || seleccionado === d.id ? colorPartido(d.id) : '#D8DBE1'
+        ),
+        borderRadius: 6,
+        barPercentage: 0.72,
       }],
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      // Fondo blanco al exportar a imagen (si no, sale transparente en Excel)
-      animation: false,
-      plugins: { legend: { position: 'bottom', labels: { boxWidth: 14, font: { family: 'Inter' } } } },
-    },
+    options: opcionesBarra({
+      total,
+      etiquetaTooltip: 'votos',
+      alClic: (evt, els) => {
+        if (!els.length) return;
+        const id = datos[els[0].index].id;
+        const sel = document.querySelector('#f-partido');
+        sel.value = sel.value === id ? '' : id;   // volver a tocar = quitar filtro
+        pintarTodo();
+      },
+    }),
   });
+
+  // Espacio a la izquierda para los logos + qué logo va en cada fila
+  chartPartidos.$logoKeys = datos.map((d) => d.id);
+  chartPartidos.$total = total;
+  chartPartidos.options.layout.padding.left = 30;
+  chartPartidos.update('none');
 }
 
-// --- Gráfica B: dónde se concentran los votos, por comunidad -----------------
+// --- Gráfica B: dónde se concentran los votos --------------------------------
 
 function pintarChartComunidad() {
   const partido = partidoFiltro();
@@ -216,38 +384,59 @@ function pintarChartComunidad() {
     nivel = 'comunidad';
   }
 
-  const quien = partido ? nombrePartido(partido).split(' — ')[0] : 'Votos totales';
-  document.querySelector('#titulo-chart-comunidad').textContent =
-    `${partido ? 'Fuerza de ' + quien : quien} · por ${nivel}`;
+  const quien = partido ? nombrePartido(partido) : 'Votos totales';
+  document.querySelector('#titulo-chart-comunidad').textContent = `${quien} · por ${nivel}`;
 
-  const grupos = [...agrupar(filas, fnClave).entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 12); // top 12 para que respire
+  const todos = [...agrupar(filas, fnClave).entries()].sort((a, b) => b[1] - a[1]);
+  const grupos = todos.slice(0, 12);
+  const sub = document.querySelector('#sub-chart-comunidad');
+  if (sub) {
+    sub.textContent = todos.length > 12
+      ? `Mostrando las 12 de ${todos.length} con más votos`
+      : `${todos.length} ${nivel === 'caserío' ? 'caseríos' : 'comunidades'} con registros`;
+  }
+
+  const total = todos.reduce((s, g) => s + g[1], 0);
+  const colorBarra = partido ? colorPartido(partido) : INK_900;
 
   if (chartComunidad) chartComunidad.destroy();
   chartComunidad = new Chart(document.querySelector('#chart-comunidad'), {
     type: 'bar',
+    plugins: [fondoBlanco, valorEnBarra],
     data: {
       labels: grupos.map(([clave]) => clave),
       datasets: [{
-        data: grupos.map(([, total]) => total),
-        backgroundColor: partido ? colorPartido(partido) : INK_900,
+        data: grupos.map(([, t]) => t),
+        backgroundColor: colorBarra,
         borderRadius: 6,
+        barPercentage: 0.75,
       }],
     },
-    options: {
-      indexAxis: 'y',
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { ticks: { precision: 0, font: { family: 'Inter' } }, grid: { color: '#E9EBEF' } },
-        y: { ticks: { font: { family: 'Inter' } }, grid: { display: false } },
+    options: opcionesBarra({
+      total,
+      etiquetaTooltip: 'votos',
+      alClic: (evt, els) => {
+        if (!els.length) return;
+        // Solo se filtra al hacer clic cuando estamos viendo comunidades.
+        if (com) return;
+        const clave = grupos[els[0].index][0];
+        const sel = document.querySelector('#f-comunidad');
+        if (![...sel.options].some((o) => o.value === clave)) return;
+        sel.value = sel.value === clave ? '' : clave;
+        pintarTodo();
       },
-    },
+    }),
   });
+  chartComunidad.$total = total;
+  chartComunidad.update('none');
 }
+
+// Cuando terminan de cargar los PNG, se repintan las gráficas para que salgan.
+window.addEventListener('load', () => {
+  Object.values(LOGOS).forEach((img) => {
+    if (!img.complete) img.addEventListener('load', () => { if (chartPartidos) chartPartidos.update('none'); });
+  });
+});
 
 // ============================================================================
 // EXPORTACIÓN A EXCEL (ExcelJS) — Resumen + gráficas + Detalle + Por comunidad
@@ -507,9 +696,23 @@ function estilizarTabla(ws, nCols) {
 
 // --- Eventos de la sección ------------------------------------------------------
 
+// Si un elemento no existe (por ejemplo, index.html nuevo con JS viejo en caché),
+// se omite ese listener en vez de romper toda la inicialización del panel.
+function alEvento(sel, evento, fn) {
+  const el = document.querySelector(sel);
+  if (el) el.addEventListener(evento, fn);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
-  document.querySelector('#f-partido').addEventListener('change', pintarTodo);
-  document.querySelector('#f-comunidad').addEventListener('change', pintarTodo);
-  document.querySelector('#btn-refrescar').addEventListener('click', () => initDashboard(true));
-  document.querySelector('#btn-exportar').addEventListener('click', exportarExcel);
+  alEvento('#f-partido', 'change', pintarTodo);
+  alEvento('#f-comunidad', 'change', pintarTodo);
+  alEvento('#btn-refrescar', 'click', () => initDashboard(true));
+  alEvento('#btn-limpiar', 'click', () => {
+    const p = document.querySelector('#f-partido');
+    const c = document.querySelector('#f-comunidad');
+    if (p) p.value = '';
+    if (c) c.value = '';
+    pintarTodo();
+  });
+  alEvento('#btn-exportar', 'click', exportarExcel);
 });
