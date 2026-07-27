@@ -222,6 +222,7 @@
           <div class="tarjeta p-4">
             <p class="eyebrow">Votos registrados</p>
             <p id="card-votos" class="mt-1 font-display text-3xl font-extrabold tabular-nums">—</p>
+            <p id="card-votos-prom" class="text-[12px] text-ink-400">&nbsp;</p>
           </div>
           <div class="tarjeta p-4">
             <p class="eyebrow">Comunidades</p>
@@ -234,6 +235,7 @@
               <img id="card-lider-logo" src="" alt="" class="hidden h-8 w-8 shrink-0 object-contain" />
               <p id="card-lider" class="truncate font-display text-2xl font-extrabold leading-tight">—</p>
             </div>
+            <p id="card-lider-pct" class="text-[12px] text-ink-400">&nbsp;</p>
           </div>
         </div>
 
@@ -260,12 +262,22 @@
           <div class="tarjeta p-5">
             <h2 id="titulo-chart-partidos" class="font-display text-[15px] font-bold">Votos por partido</h2>
             <p class="mt-0.5 text-[12px] text-ink-400">Ordenado de mayor a menor</p>
-            <div class="mt-4 h-[300px]"><canvas id="chart-partidos"></canvas></div>
+            <div class="relative mt-4 h-[300px]">
+              <canvas id="chart-partidos"></canvas>
+              <div id="vacio-partidos" class="absolute inset-0 hidden flex-col items-center justify-center bg-white text-center text-[13px] text-ink-400">
+                Aún no hay votos registrados para mostrar.
+              </div>
+            </div>
           </div>
           <div class="tarjeta p-5">
             <h2 id="titulo-chart-comunidad" class="font-display text-[15px] font-bold">Votos por comunidad</h2>
             <p id="sub-chart-comunidad" class="mt-0.5 text-[12px] text-ink-400">Las 12 con más votos</p>
-            <div class="mt-4 h-[440px]"><canvas id="chart-comunidad"></canvas></div>
+            <div class="relative mt-4 h-[440px]">
+              <canvas id="chart-comunidad"></canvas>
+              <div id="vacio-comunidad" class="absolute inset-0 hidden flex-col items-center justify-center bg-white text-center text-[13px] text-ink-400">
+                No hay datos para este filtro.
+              </div>
+            </div>
           </div>
         </div>
       </section>
