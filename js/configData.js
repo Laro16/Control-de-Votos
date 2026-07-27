@@ -5,10 +5,19 @@
 // ============================================================================
 
 // --- PARTIDOS (6) -----------------------------------------------------------
-// id       : ES LA LLAVE EN LA BASE DE DATOS. NO CAMBIAR: los votos ya guardados
-//            se reasignarían solos a otro partido.
-// logo     : ruta del PNG dentro de img/partidos/ (esto sí se puede reacomodar libremente)
-// color    : se usa en las gráficas del dashboard y en las fichas del formulario
+// id    : LLAVE EN LA BASE DE DATOS. NO CAMBIAR: los votos ya guardados
+//         se reasignarían solos a otro partido.
+// logo  : archivo que CONTIENE la imagen de ese partido.
+//         OJO: el número del archivo NO sigue al id, porque las imágenes se
+//         guardaron en otro orden. Cada partido apunta al archivo que tiene SU
+//         imagen, no al que coincide con su número:
+//           P1 Prosperidad → p1.png (Prosperidad)
+//           P2 Cabal       → p3.png (Cabal)      ← Cabal es P2, su imagen es p3
+//           P3 Valor       → p2.png (Valor)      ← Valor es P3, su imagen es p2
+//           P4 Victoria    → p4.png (Victoria)
+//           P5 UNE         → p5.png (UNE)
+//           P6 Elefante    → p6.png (Elefante)
+// color : se usa en las gráficas del dashboard y en las fichas del formulario.
 const PARTIDOS = [
   { id: 'P1', nombre: 'Prosperidad Ciudadana', sigla: 'PC',       color: '#DC2626', logo: 'img/partidos/p1.png' },
   { id: 'P2', nombre: 'Cabal',                 sigla: 'CABAL',    color: '#2563EB', logo: 'img/partidos/p3.png' },
