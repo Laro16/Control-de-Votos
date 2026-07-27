@@ -1,11 +1,22 @@
 // ============================================================================
-// SERVICE WORKER básico — hace la app instalable y cachea el "shell".
-// ⚠️ Al desplegar cambios, sube el número de VERSION para que los teléfonos
-// descarguen la app nueva (si no, seguirán viendo la versión cacheada).
+// SERVICE WORKER — hace la app instalable y la deja funcionar sin internet.
+//
+// Estrategia: "RED PRIMERO" para los archivos propios.
+//   · Con internet: siempre se sirve la versión más nueva del servidor y se
+//     guarda una copia. Cambiás un archivo, redesplegás, recargás y aparece.
+//     YA NO hace falta subir la VERSION cada vez que cambiás un logo o el JS.
+//   · Sin internet: se sirve la última copia guardada.
+//
+// La VERSION solo sirve para limpiar cachés viejos al instalar una app nueva.
+// Conviene subirla igual cuando hay cambios grandes, pero ya no es obligatorio
+// para que se vean las actualizaciones.
 // ============================================================================
 
-const VERSION = 'censo-v10';
+const VERSION = 'censo-v11';
 
+// Lo mínimo para que la app abra sin internet la primera vez.
+// Las imágenes de partido NO van acá a propósito: cambian seguido y no
+// queremos que queden congeladas.
 const APP_SHELL = [
   './',
   './index.html',
@@ -18,18 +29,11 @@ const APP_SHELL = [
   './img/logo.png',
   './img/icon-192.png',
   './img/icon-512.png',
-  './img/partidos/p1.png',
-  './img/partidos/p2.png',
-  './img/partidos/p3.png',
-  './img/partidos/p4.png',
-  './img/partidos/p5.png',
-  './img/partidos/p6.png',
 ];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
     caches.open(VERSION).then(async (cache) => {
-      // Se cachea archivo por archivo: si falta uno, no se rompe la instalación
       await Promise.allSettled(APP_SHELL.map((url) => cache.add(url)));
       self.skipWaiting();
     })
@@ -47,32 +51,27 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const req = e.request;
 
-  // Nunca interceptar escrituras ni llamadas a Supabase / CDNs:
-  // los datos siempre van directo a la red.
+  // Nunca interceptar escrituras ni llamadas a Supabase / CDNs externas.
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
 
-  // Navegación: red primero (para recibir actualizaciones), caché de respaldo
-  if (req.mode === 'navigate') {
-    e.respondWith(
-      fetch(req).catch(() => caches.match('./index.html'))
-    );
-    return;
-  }
-
-  // Archivos estáticos propios: caché primero, red de respaldo (y se guarda copia)
+  // RED PRIMERO para todo lo propio (navegación, JS, CSS e imágenes):
+  // se intenta el servidor; si responde, se guarda copia y se entrega.
+  // Si no hay internet, se cae al caché; y si es navegación, al index.
   e.respondWith(
-    caches.match(req).then((enCache) => {
-      if (enCache) return enCache;
-      return fetch(req).then((resp) => {
-        // Solo se cachean respuestas exitosas: un 404 cacheado se serviría para siempre
+    fetch(req)
+      .then((resp) => {
         if (resp.ok) {
           const copia = resp.clone();
           caches.open(VERSION).then((cache) => cache.put(req, copia));
         }
         return resp;
-      });
-    })
+      })
+      .catch(() =>
+        caches.match(req).then((enCache) =>
+          enCache || (req.mode === 'navigate' ? caches.match('./index.html') : Response.error())
+        )
+      )
   );
 });
