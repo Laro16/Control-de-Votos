@@ -230,7 +230,16 @@ function opcionesBarra({ total, alClic, etiquetaTooltip }) {
         grid: { color: '#EDEEF1', drawBorder: false },
       },
       y: {
-        ticks: { font: { family: 'Inter', size: 12, weight: '600' }, color: INK_900 },
+        ticks: {
+          font: { family: 'Inter', size: 12, weight: '600' }, color: INK_900,
+          autoSkip: false,
+          // Nombres largos (ej. "Cabecera municipal (Tamahú)") se recortan
+          // para que no empujen la gráfica ni se solapen.
+          callback(valor) {
+            const txt = this.getLabelForValue(valor);
+            return txt.length > 24 ? txt.slice(0, 23) + '…' : txt;
+          },
+        },
         grid: { display: false, drawBorder: false },
       },
     },
@@ -283,9 +292,11 @@ function pintarResumen() {
   let lider = '—';
   let colorLider = INK_900;
   let siglaLider = null;
+  let pctLider = 0;
   if (votos > 0) {
-    const [sigla] = [...porPartido.entries()].sort((a, b) => b[1] - a[1])[0];
+    const [sigla, cant] = [...porPartido.entries()].sort((a, b) => b[1] - a[1])[0];
     siglaLider = sigla;
+    pctLider = Math.round((cant / votos) * 100);
     const p = PARTIDOS.find((x) => x.id === sigla);
     lider = p ? p.nombre : sigla;
     colorLider = colorPartido(sigla);
@@ -297,9 +308,20 @@ function pintarResumen() {
   const totalEl = document.querySelector('#card-comunidades-total');
   if (totalEl) totalEl.textContent = TOTAL_COMUNIDADES ? `de ${TOTAL_COMUNIDADES} comunidades` : 'comunidades';
 
+  // Promedio de votos por familia (ayuda a detectar cifras raras al digitar)
+  const promEl = document.querySelector('#card-votos-prom');
+  if (promEl) {
+    promEl.innerHTML = familias > 0
+      ? `≈ ${(votos / familias).toLocaleString('es-GT', { maximumFractionDigits: 1 })} por familia`
+      : '&nbsp;';
+  }
+
   const cardLider = document.querySelector('#card-lider');
   cardLider.textContent = lider;
   cardLider.style.color = colorLider;
+
+  const pctEl = document.querySelector('#card-lider-pct');
+  if (pctEl) pctEl.innerHTML = siglaLider ? `${pctLider}% de los votos` : '&nbsp;';
 
   const logoLider = document.querySelector('#card-lider-logo');
   const pLider = siglaLider ? PARTIDOS.find((x) => x.id === siglaLider) : null;
@@ -310,6 +332,14 @@ function pintarResumen() {
   } else {
     logoLider.classList.add('hidden');
   }
+}
+
+// Muestra u oculta el mensaje de "sin datos" sobre una gráfica.
+function mostrarVacio(id, mostrar) {
+  const el = document.querySelector(id);
+  if (!el) return;
+  el.classList.toggle('hidden', !mostrar);
+  el.classList.toggle('flex', mostrar);
 }
 
 // --- Gráfica A: votos por partido (barras horizontales, con logo) -------------
@@ -327,6 +357,8 @@ function pintarChartPartidos() {
 
   const total = datos.reduce((s, d) => s + d.total, 0);
   const seleccionado = partidoFiltro();
+
+  mostrarVacio('#vacio-partidos', total === 0);
 
   if (chartPartidos) chartPartidos.destroy();
   chartPartidos = new Chart(document.querySelector('#chart-partidos'), {
@@ -398,6 +430,8 @@ function pintarChartComunidad() {
 
   const total = todos.reduce((s, g) => s + g[1], 0);
   const colorBarra = partido ? colorPartido(partido) : INK_900;
+
+  mostrarVacio('#vacio-comunidad', grupos.length === 0);
 
   if (chartComunidad) chartComunidad.destroy();
   chartComunidad = new Chart(document.querySelector('#chart-comunidad'), {
