@@ -181,10 +181,11 @@ const valorEnBarra = {
     ctx.textBaseline = 'middle';
     meta.data.forEach((barra, i) => {
       const v = chart.data.datasets[0].data[i];
-      if (v == null) return;
+      if (v == null || v === 0) return;   // la barra vacía ya comunica "0"
       const pct = total > 0 ? Math.round((v / total) * 100) : 0;
       const texto = total > 0 ? `${v.toLocaleString('es-GT')}  (${pct}%)` : String(v);
       const anchoTexto = ctx.measureText(texto).width;
+      // Etiqueta a la derecha de la barra si hay lugar; si no, dentro en blanco.
       const cabe = barra.x + 8 + anchoTexto < chart.chartArea.right;
       ctx.fillStyle = cabe ? INK_900 : '#FFFFFF';
       ctx.textAlign = cabe ? 'left' : 'right';
