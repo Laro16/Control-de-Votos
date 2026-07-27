@@ -44,7 +44,17 @@
   <!-- ======================================================================
        VISTA: LOGIN
   ======================================================================= -->
-  <div id="view-login" class="flex min-h-screen items-center justify-center px-4 py-10">
+  <!-- ======================================================================
+       VISTA: CARGA (visible por defecto, mientras se verifica la sesión).
+       Evita el parpadeo del login al refrescar con sesión activa.
+  ======================================================================= -->
+  <div id="view-cargando" class="flex min-h-screen flex-col items-center justify-center gap-4 px-4">
+    <img src="img/logo.png" alt="" class="h-14 w-auto opacity-90" onerror="this.style.display='none'" />
+    <div class="h-8 w-8 animate-spin rounded-full border-2 border-ink-200 border-t-ink-900"></div>
+    <p class="text-[13px] text-ink-400">Cargando…</p>
+  </div>
+
+  <div id="view-login" class="hidden min-h-screen items-center justify-center px-4 py-10">
     <div class="w-full max-w-sm">
       <div class="mb-8 text-center">
         <!-- ⚠️ CAMBIAR: logo real en img/logo.png -->
