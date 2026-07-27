@@ -68,8 +68,31 @@ function logout() {
   sb.auth.signOut().finally(() => location.reload());
 }
 
+// ¿La app ya está en pantalla? Sirve para no re-renderizar (y sacar al usuario
+// de su sección) cuando el token se refresca solo en segundo plano.
+let appMostrada = false;
+
+function ocultarCargando() {
+  const c = $('#view-cargando');
+  if (c) { c.classList.add('hidden'); c.classList.remove('flex'); }
+}
+
+function mostrarLogin() {
+  ocultarCargando();
+  const app = $('#view-app');
+  app.classList.add('hidden');
+  app.classList.remove('flex');
+  const login = $('#view-login');
+  login.classList.remove('hidden');
+  login.classList.add('flex');
+  appMostrada = false;
+}
+
 function mostrarApp() {
-  $('#view-login').classList.add('hidden');
+  ocultarCargando();
+  const login = $('#view-login');
+  login.classList.add('hidden');
+  login.classList.remove('flex');
   const app = $('#view-app');
   app.classList.remove('hidden');
   app.classList.add('flex');
@@ -81,6 +104,18 @@ function mostrarApp() {
   if (currentUser.role === 'admin') $('#tab-dashboard').classList.remove('hidden');
 
   cambiarSeccion('section-ingreso');
+  appMostrada = true;
+}
+
+// Decide qué vista mostrar según haya o no sesión. Si la app ya está mostrada,
+// no la vuelve a renderizar (un refresco de token no debe mover al usuario).
+function aplicarSesion(session) {
+  if (session) {
+    currentUser = usuarioDesdeSesion(session);
+    if (!appMostrada) mostrarApp();
+  } else {
+    mostrarLogin();
+  }
 }
 
 // ============================================================================
@@ -344,14 +379,24 @@ function init() {
   renderChipsPartidos();
   renderListaVotos();
 
-  // Restaurar la sesión que Supabase guarda en el dispositivo:
-  // el digitador no tiene que volver a loguearse cada vez que abre la app.
-  sb.auth.getSession().then(({ data }) => {
-    if (data && data.session) {
-      currentUser = usuarioDesdeSesion(data.session);
-      mostrarApp();
-    }
-  });
+  // Arranque de sesión robusto (3 capas):
+  // 1) onAuthStateChange dispara un evento en cuanto la sesión guardada termina
+  //    de cargar (haya o no sesión) y también al refrescarse el token. Es más
+  //    confiable que preguntar una sola vez, que era la causa del "a veces me
+  //    deja en login y tengo que refrescar".
+  sb.auth.onAuthStateChange((_evento, session) => aplicarSesion(session));
+
+  // 2) Respaldo directo, por si el evento no llegara.
+  sb.auth.getSession()
+    .then(({ data }) => aplicarSesion(data ? data.session : null))
+    .catch(() => mostrarLogin());
+
+  // 3) Red de seguridad: si en 6 s nada resolvió (sin internet, por ejemplo),
+  //    mostramos el login en vez de dejar la pantalla de carga congelada.
+  setTimeout(() => {
+    const c = $('#view-cargando');
+    if (c && !c.classList.contains('hidden')) mostrarLogin();
+  }, 6000);
 
   // PWA: registrar el service worker
   if ('serviceWorker' in navigator) {
