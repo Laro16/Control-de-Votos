@@ -4,13 +4,14 @@
 // COMUNIDAD, no el departamento/municipio. Por eso los filtros y la gráfica
 // de ubicación trabajan a nivel de comunidad.
 // Lee la vista "vista_censo" (requiere sesión de Supabase Auth con rol admin),
-// pinta 4 KPIs + 2 gráficas con Chart.js y exporta un Excel con formato,
-// resumen, gráficas y desglose por comunidad usando ExcelJS.
+// pinta KPIs, 2 gráficas y una matriz comunidad × partido; también exporta un
+// Excel con el mismo resumen territorial usando ExcelJS.
 // ============================================================================
 
 let censoRows = null;   // filas crudas de vista_censo
 let chartPartidos = null;
 let chartComunidad = null;
+let ultimaActualizacion = null;
 
 const GRIS_NEUTRO = '#7C8496';
 const INK_900 = '#111826';
@@ -34,6 +35,16 @@ const TOTAL_COMUNIDADES =
     : 0;
 
 // --- Entrada principal (la llama app.js al abrir la pestaña) ----------------
+function mostrarEstadoDashboard(mensaje, tipo = 'ok') {
+  const texto = document.querySelector('#dash-actualizado');
+  const punto = document.querySelector('#dash-estado-punto');
+  if (texto) texto.textContent = mensaje;
+  if (punto) {
+    punto.classList.toggle('is-loading', tipo === 'loading');
+    punto.classList.toggle('is-error', tipo === 'error');
+  }
+}
+
 async function initDashboard(forzar = false) {
   if (censoRows && !forzar) {
     pintarTodo();
@@ -41,38 +52,56 @@ async function initDashboard(forzar = false) {
   }
 
   const aviso = document.querySelector('#dash-aviso');
-  aviso.classList.add('hidden');
-
-  // 1) Sesión con rol de administrador. El RLS del servidor bloquea la
-  //    lectura a cualquier otro rol; esta verificación solo sirve para dar
-  //    un mensaje claro en vez de una pantalla vacía.
-  const { data: sesionData } = await sb.auth.getSession();
-  const rol = sesionData && sesionData.session
-    ? (sesionData.session.user.app_metadata || {}).role
-    : null;
-  if (rol !== 'admin') {
-    aviso.textContent =
-      'Tu usuario no tiene rol de administrador. Asígnalo con el BLOQUE 5 de sql/setup.sql ' +
-      'y vuelve a cerrar y abrir sesión para que el permiso entre en vigor.';
-    aviso.classList.remove('hidden');
-    return;
+  const btn = document.querySelector('#btn-refrescar');
+  const textoBtn = btn ? btn.textContent : '';
+  if (aviso) aviso.classList.add('hidden');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Actualizando…';
   }
+  mostrarEstadoDashboard('Actualizando resultados…', 'loading');
 
-  // 2) Datos
-  const { data, error } = await sb
-    .from('vista_censo')
-    .select('*')
-    .order('fecha_registro', { ascending: false });
+  try {
+    // 1) Confirmar la sesión y el rol que controla la interfaz.
+    const { data: sesionData } = await sb.auth.getSession();
+    const rol = sesionData && sesionData.session
+      ? (sesionData.session.user.app_metadata || {}).role
+      : null;
+    if (rol !== 'admin') {
+      throw new Error(
+        'Tu usuario no tiene rol de administrador. Asígnalo con el BLOQUE 5 de sql/setup.sql ' +
+        'y vuelve a cerrar y abrir sesión para que el permiso entre en vigor.'
+      );
+    }
 
-  if (error) {
-    aviso.textContent = 'No se pudieron cargar los datos: ' + error.message;
-    aviso.classList.remove('hidden');
-    return;
+    // 2) Cargar todas las líneas del censo.
+    const { data, error } = await sb
+      .from('vista_censo')
+      .select('*')
+      .order('fecha_registro', { ascending: false });
+    if (error) throw error;
+
+    censoRows = data || [];
+    ultimaActualizacion = new Date();
+    const familias = new Set(censoRows.map((r) => r.familia_id)).size;
+    mostrarEstadoDashboard(
+      `Actualizado ${ultimaActualizacion.toLocaleTimeString('es-GT', { hour: '2-digit', minute: '2-digit' })} · ${familias.toLocaleString('es-GT')} familias`
+    );
+    poblarFiltros();
+    pintarTodo();
+  } catch (err) {
+    const mensaje = err && err.message ? err.message : 'No se pudieron cargar los datos.';
+    if (aviso) {
+      aviso.textContent = mensaje;
+      aviso.classList.remove('hidden');
+    }
+    mostrarEstadoDashboard('No fue posible actualizar los resultados', 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = textoBtn || 'Actualizar datos';
+    }
   }
-
-  censoRows = data || [];
-  poblarFiltros();
-  pintarTodo();
 }
 
 // --- Filtros -----------------------------------------------------------------
@@ -264,6 +293,7 @@ function opcionesBarra({ total, alClic, etiquetaTooltip }) {
 function pintarTodo() {
   pintarResumen();
   pintarChartPartidos();
+  pintarTablaComunidades();
   pintarChartComunidad();
   actualizarPista();
 }
@@ -272,6 +302,50 @@ function actualizarPista() {
   const p = partidoFiltro();
   const c = comunidadFiltro();
   const pista = document.querySelector('#pista-filtros');
+  const conteo = document.querySelector('#filtros-conteo');
+  const chips = document.querySelector('#filtros-activos');
+  const exportContext = document.querySelector('#export-context');
+  const filtros = [];
+  if (p) filtros.push({ tipo: 'partido', texto: `Partido: ${nombrePartido(p)}` });
+  if (c) filtros.push({ tipo: 'comunidad', texto: `Comunidad: ${c}` });
+
+  if (conteo) {
+    conteo.textContent = filtros.length
+      ? `${filtros.length} ${filtros.length === 1 ? 'filtro activo' : 'filtros activos'}`
+      : 'Sin filtros';
+  }
+
+  if (chips) {
+    chips.innerHTML = '';
+    filtros.forEach(({ tipo, texto }) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'dash-filter-chip';
+      btn.setAttribute('aria-label', `Quitar filtro ${texto}`);
+      btn.append(document.createTextNode(texto));
+      const cerrar = document.createElement('span');
+      cerrar.textContent = '×';
+      cerrar.setAttribute('aria-hidden', 'true');
+      btn.appendChild(cerrar);
+      btn.addEventListener('click', () => {
+        const select = document.querySelector(tipo === 'partido' ? '#f-partido' : '#f-comunidad');
+        if (select) select.value = '';
+        pintarTodo();
+      });
+      chips.appendChild(btn);
+    });
+  }
+
+  const filas = filasFiltradas();
+  if (exportContext) {
+    const comunidades = new Set(filas.map(comunidadDe)).size;
+    const votantes = filas.reduce((s, r) => s + r.cantidad, 0);
+    exportContext.textContent = filas.length
+      ? `${comunidades} ${comunidades === 1 ? 'comunidad' : 'comunidades'} · ${votantes.toLocaleString('es-GT')} votantes`
+      : 'Sin datos para exportar';
+  }
+
+  if (!pista) return;
   if (!p && !c) {
     pista.textContent =
       'Toca cualquier barra de las gráficas para filtrar. Tócala otra vez para quitar el filtro.';
@@ -290,6 +364,215 @@ function agrupar(filas, fnClave) {
     mapa.set(clave, (mapa.get(clave) || 0) + r.cantidad);
   });
   return mapa;
+}
+
+// --- Matriz comunidad × partido --------------------------------------------
+
+function resumenPorComunidades(filas) {
+  const mapa = new Map();
+
+  (filas || []).forEach((r) => {
+    const comunidad = comunidadDe(r);
+    if (!mapa.has(comunidad)) {
+      mapa.set(comunidad, {
+        comunidad,
+        familiasSet: new Set(),
+        partidos: Object.fromEntries(PARTIDOS.map((p) => [p.id, 0])),
+        total: 0,
+      });
+    }
+
+    const item = mapa.get(comunidad);
+    item.familiasSet.add(r.familia_id);
+    const cantidad = Number(r.cantidad) || 0;
+    item.partidos[r.partido] = (item.partidos[r.partido] || 0) + cantidad;
+    item.total += cantidad;
+  });
+
+  return [...mapa.values()].map((item) => {
+    const [liderId, liderVotos] = Object.entries(item.partidos)
+      .sort((a, b) => b[1] - a[1])[0] || [null, 0];
+    return {
+      comunidad: item.comunidad,
+      familias: item.familiasSet.size,
+      partidos: item.partidos,
+      total: item.total,
+      liderId: liderVotos > 0 ? liderId : null,
+      liderVotos,
+      liderPct: item.total > 0 ? Math.round((liderVotos / item.total) * 100) : 0,
+    };
+  });
+}
+
+function ordenarResumenComunidades(resumen, orden = 'total-desc') {
+  const copia = [...resumen];
+  const porNombre = (a, b) => a.comunidad.localeCompare(b.comunidad, 'es');
+  if (orden === 'nombre-asc') return copia.sort(porNombre);
+  if (orden === 'familias-desc') {
+    return copia.sort((a, b) => b.familias - a.familias || b.total - a.total || porNombre(a, b));
+  }
+  if (orden === 'lider-asc') {
+    return copia.sort((a, b) =>
+      String(a.liderId || '').localeCompare(String(b.liderId || ''), 'es') ||
+      b.total - a.total || porNombre(a, b)
+    );
+  }
+  return copia.sort((a, b) => b.total - a.total || porNombre(a, b));
+}
+
+const normalizarTexto = (valor) => String(valor || '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase()
+  .trim();
+
+function crearCelda(texto, etiqueta = 'td') {
+  const celda = document.createElement(etiqueta);
+  celda.textContent = texto;
+  return celda;
+}
+
+function pintarEncabezadoComunidades() {
+  const head = document.querySelector('#tabla-comunidades-head');
+  if (!head) return;
+  head.innerHTML = '';
+  const fila = document.createElement('tr');
+
+  const comunidad = crearCelda('Comunidad', 'th');
+  comunidad.scope = 'col';
+  fila.appendChild(comunidad);
+
+  const familias = crearCelda('Familias', 'th');
+  familias.scope = 'col';
+  fila.appendChild(familias);
+
+  PARTIDOS.forEach((p) => {
+    const th = document.createElement('th');
+    th.scope = 'col';
+    th.title = p.nombre;
+    const contenido = document.createElement('span');
+    contenido.className = 'dash-party-head';
+    const punto = document.createElement('span');
+    punto.className = 'dash-party-dot';
+    punto.style.setProperty('--party-color', p.color);
+    punto.setAttribute('aria-hidden', 'true');
+    contenido.append(punto, document.createTextNode(p.sigla));
+    th.appendChild(contenido);
+    fila.appendChild(th);
+  });
+
+  ['Total', 'Líder', 'Detalle'].forEach((texto) => {
+    const th = crearCelda(texto, 'th');
+    th.scope = 'col';
+    fila.appendChild(th);
+  });
+  head.appendChild(fila);
+}
+
+function pintarTablaComunidades() {
+  const body = document.querySelector('#tabla-comunidades-body');
+  const foot = document.querySelector('#tabla-comunidades-foot');
+  const shell = document.querySelector('.dash-table-shell');
+  const vacio = document.querySelector('#tabla-comunidades-vacia');
+  const contador = document.querySelector('#comunidades-conteo');
+  if (!body || !foot) return;
+
+  pintarEncabezadoComunidades();
+  body.innerHTML = '';
+  foot.innerHTML = '';
+
+  const resumen = resumenPorComunidades(filasFiltradas());
+  const busqueda = normalizarTexto(valorDe('#buscar-comunidad'));
+  const orden = valorDe('#orden-comunidades') || 'total-desc';
+  const visibles = ordenarResumenComunidades(
+    resumen.filter((r) => !busqueda || normalizarTexto(r.comunidad).includes(busqueda)),
+    orden
+  );
+
+  if (contador) {
+    contador.textContent = `Mostrando ${visibles.length} de ${resumen.length} ${resumen.length === 1 ? 'comunidad' : 'comunidades'}`;
+  }
+  if (shell) shell.classList.toggle('hidden', visibles.length === 0);
+  if (vacio) vacio.classList.toggle('hidden', visibles.length > 0);
+
+  const partidoActivo = partidoFiltro();
+  const comunidadActiva = comunidadFiltro();
+  visibles.forEach((item) => {
+    const tr = document.createElement('tr');
+    tr.classList.toggle('is-selected', item.comunidad === comunidadActiva);
+
+    const nombre = document.createElement('th');
+    nombre.scope = 'row';
+    const principal = document.createElement('span');
+    principal.className = 'dash-community-name';
+    principal.textContent = item.comunidad;
+    const secundario = document.createElement('span');
+    secundario.className = 'dash-community-sub';
+    secundario.textContent = `${item.familias} ${item.familias === 1 ? 'familia' : 'familias'}`;
+    nombre.append(principal, secundario);
+    tr.appendChild(nombre);
+
+    tr.appendChild(crearCelda(item.familias.toLocaleString('es-GT')));
+    PARTIDOS.forEach((p) => {
+      const td = crearCelda((item.partidos[p.id] || 0).toLocaleString('es-GT'));
+      td.className = 'dash-party-cell';
+      td.style.setProperty('--party-color', p.color);
+      td.classList.toggle('is-active', partidoActivo === p.id);
+      tr.appendChild(td);
+    });
+
+    const total = crearCelda(item.total.toLocaleString('es-GT'));
+    total.className = 'dash-total-cell';
+    tr.appendChild(total);
+
+    const lider = document.createElement('td');
+    if (item.liderId) {
+      const partido = PARTIDOS.find((p) => p.id === item.liderId);
+      const badge = document.createElement('span');
+      badge.className = 'dash-leader-badge';
+      badge.style.setProperty('--party-color', colorPartido(item.liderId));
+      badge.textContent = `${partido ? partido.sigla : item.liderId} · ${item.liderPct}%`;
+      lider.appendChild(badge);
+    } else {
+      lider.textContent = '—';
+    }
+    tr.appendChild(lider);
+
+    const accion = document.createElement('td');
+    const btn = document.createElement('button');
+    const seleccionada = item.comunidad === comunidadActiva;
+    btn.type = 'button';
+    btn.className = 'dash-detail-button';
+    btn.textContent = seleccionada ? 'Quitar filtro' : 'Ver detalle';
+    btn.setAttribute('aria-label', `${seleccionada ? 'Quitar filtro de' : 'Ver detalle de'} ${item.comunidad}`);
+    btn.addEventListener('click', () => {
+      const select = document.querySelector('#f-comunidad');
+      if (!select) return;
+      select.value = seleccionada ? '' : item.comunidad;
+      pintarTodo();
+      document.querySelector('#filtros-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    accion.appendChild(btn);
+    tr.appendChild(accion);
+    body.appendChild(tr);
+  });
+
+  if (resumen.length > 0) {
+    const tr = document.createElement('tr');
+    const etiqueta = crearCelda('Total del filtro', 'th');
+    etiqueta.scope = 'row';
+    tr.appendChild(etiqueta);
+    tr.appendChild(crearCelda(resumen.reduce((s, r) => s + r.familias, 0).toLocaleString('es-GT')));
+    PARTIDOS.forEach((p) => {
+      tr.appendChild(crearCelda(
+        resumen.reduce((s, r) => s + (r.partidos[p.id] || 0), 0).toLocaleString('es-GT')
+      ));
+    });
+    tr.appendChild(crearCelda(resumen.reduce((s, r) => s + r.total, 0).toLocaleString('es-GT')));
+    tr.appendChild(crearCelda('—'));
+    tr.appendChild(crearCelda(''));
+    foot.appendChild(tr);
+  }
 }
 
 function pintarResumen() {
@@ -366,7 +649,7 @@ function mostrarVacio(id, mostrar) {
 function pintarChartPartidos() {
   const filas = filasFiltradas({ incluirPartido: false });
   const lugar = comunidadFiltro() || 'todo el municipio';
-  document.querySelector('#titulo-chart-partidos').textContent = `Votos por partido · ${lugar}`;
+  document.querySelector('#titulo-chart-partidos').textContent = `Votantes por partido · ${lugar}`;
 
   const porPartido = agrupar(filas, (r) => r.partido);
   // Todos los partidos aparecen (aunque tengan 0), ordenados de mayor a menor.
@@ -397,7 +680,7 @@ function pintarChartPartidos() {
     },
     options: opcionesBarra({
       total,
-      etiquetaTooltip: 'votos',
+      etiquetaTooltip: 'votantes',
       alClic: (evt, els) => {
         if (!els.length) return;
         const id = datos[els[0].index].id;
@@ -433,15 +716,15 @@ function pintarChartComunidad() {
     nivel = 'comunidad';
   }
 
-  const quien = partido ? nombrePartido(partido) : 'Votos totales';
+  const quien = partido ? nombrePartido(partido) : 'Votantes totales';
   document.querySelector('#titulo-chart-comunidad').textContent = `${quien} · por ${nivel}`;
 
   const todos = [...agrupar(filas, fnClave).entries()].sort((a, b) => b[1] - a[1]);
-  const grupos = todos.slice(0, 12);
+  const grupos = todos.slice(0, 10);
   const sub = document.querySelector('#sub-chart-comunidad');
   if (sub) {
-    sub.textContent = todos.length > 12
-      ? `Mostrando las 12 de ${todos.length} con más votos`
+    sub.textContent = todos.length > 10
+      ? `Mostrando las 10 de ${todos.length} con más votantes; la tabla incluye todas`
       : `${todos.length} ${nivel === 'caserío' ? 'caseríos' : 'comunidades'} con registros`;
   }
 
@@ -465,7 +748,7 @@ function pintarChartComunidad() {
     },
     options: opcionesBarra({
       total,
-      etiquetaTooltip: 'votos',
+      etiquetaTooltip: 'votantes',
       alClic: (evt, els) => {
         if (!els.length) return;
         // Solo se filtra al hacer clic cuando estamos viendo comunidades.
@@ -574,7 +857,7 @@ async function exportarExcel() {
     // Tarjetas KPI (fila 5)
     const kpis = [
       ['Familias censadas', familias],
-      ['Votos registrados', votos],
+      ['Votantes registrados', votos],
       ['Comunidades cubiertas', TOTAL_COMUNIDADES ? `${cubiertas} / ${TOTAL_COMUNIDADES}` : cubiertas],
       ['Partido líder', lider],
     ];
@@ -595,7 +878,7 @@ async function exportarExcel() {
     // Tabla "Votos por partido" (a la derecha de los KPIs)
     const encTablaFila = 5;
     ws.getCell(`D${encTablaFila}`).value = 'PARTIDO';
-    ws.getCell(`E${encTablaFila}`).value = 'VOTOS';
+    ws.getCell(`E${encTablaFila}`).value = 'VOTANTES';
     ['D', 'E'].forEach((c) => {
       const cell = ws.getCell(`${c}${encTablaFila}`);
       cell.font = { name: 'Arial', size: 9, bold: true, color: { argb: XL.blanco } };
@@ -652,7 +935,7 @@ async function exportarExcel() {
       { header: 'Familia',        key: 'familia',    width: 26 },
       { header: 'Teléfono',       key: 'telefono',   width: 14 },
       { header: 'Partido',        key: 'partido',    width: 10 },
-      { header: 'Votos',          key: 'votos',      width: 8 },
+      { header: 'Votantes',       key: 'votos',      width: 10 },
       { header: 'Registrado por', key: 'registrado', width: 24 },
       { header: 'Fecha',          key: 'fecha',      width: 20 },
     ];
@@ -676,35 +959,49 @@ async function exportarExcel() {
     // ========================================================================
     // HOJA 3 · POR COMUNIDAD (matriz comunidad × partido)
     // ========================================================================
-    const wc = wb.addWorksheet('Por comunidad', { views: [{ state: 'frozen', ySplit: 1, xSplit: 1 }] });
+    const wc = wb.addWorksheet('Por comunidad', { views: [{ state: 'frozen', ySplit: 1, xSplit: 2 }] });
     const siglas = partido ? [partido] : PARTIDOS.map((p) => p.id);
     wc.columns = [
       { header: 'Comunidad', key: 'com', width: 26 },
+      { header: 'Familias', key: 'familias', width: 10 },
       ...siglas.map((s) => ({ header: s, key: s, width: 9 })),
-      { header: 'Total', key: 'total', width: 10 },
+      { header: 'Total votantes', key: 'total', width: 14 },
+      { header: 'Partido líder', key: 'lider', width: 22 },
     ];
-    // Agregación comunidad → {partido: votos}
-    const matriz = new Map();
-    filasAmbito.forEach((r) => {
-      const c = comunidadDe(r);
-      if (!matriz.has(c)) matriz.set(c, {});
-      matriz.get(c)[r.partido] = (matriz.get(c)[r.partido] || 0) + r.cantidad;
-    });
-    [...matriz.entries()]
-      .map(([c, obj]) => {
-        const total = Object.values(obj).reduce((s, n) => s + n, 0);
-        return [c, obj, total];
-      })
-      .sort((a, b) => b[2] - a[2])
-      .forEach(([c, obj, total]) => {
-        const fila = { com: c, total };
-        siglas.forEach((s) => { fila[s] = obj[s] || 0; });
+    const resumenComunidades = ordenarResumenComunidades(
+      resumenPorComunidades(filasAmbito),
+      'total-desc'
+    );
+    resumenComunidades.forEach((item) => {
+        const fila = {
+          com: item.comunidad,
+          familias: item.familias,
+          total: item.total,
+          lider: item.liderId
+            ? `${nombrePartido(item.liderId)} (${item.liderPct}%)`
+            : '—',
+        };
+        siglas.forEach((s) => { fila[s] = item.partidos[s] || 0; });
         wc.addRow(fila);
       });
-    estilizarTabla(wc, siglas.length + 2);
+    const totalComunidad = {
+      com: 'TOTAL DEL FILTRO',
+      familias: new Set(filasAmbito.map((r) => r.familia_id)).size,
+      total: filasAmbito.reduce((s, r) => s + r.cantidad, 0),
+      lider: '',
+    };
+    siglas.forEach((s) => {
+      totalComunidad[s] = filasAmbito
+        .filter((r) => r.partido === s)
+        .reduce((suma, r) => suma + r.cantidad, 0);
+    });
+    const filaTotal = wc.addRow(totalComunidad);
+    filaTotal.font = { name: 'Arial', size: 10, bold: true };
+
+    estilizarTabla(wc, siglas.length + 4);
     // Colorear encabezados de partido con su color
     siglas.forEach((s, i) => {
-      const cell = wc.getRow(1).getCell(i + 2);
+      const cell = wc.getRow(1).getCell(i + 3);
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(colorPartido(s)) } };
     });
 
@@ -767,12 +1064,16 @@ function alEvento(sel, evento, fn) {
 document.addEventListener('DOMContentLoaded', () => {
   alEvento('#f-partido', 'change', pintarTodo);
   alEvento('#f-comunidad', 'change', pintarTodo);
+  alEvento('#buscar-comunidad', 'input', pintarTablaComunidades);
+  alEvento('#orden-comunidades', 'change', pintarTablaComunidades);
   alEvento('#btn-refrescar', 'click', () => initDashboard(true));
   alEvento('#btn-limpiar', 'click', () => {
     const p = document.querySelector('#f-partido');
     const c = document.querySelector('#f-comunidad');
+    const b = document.querySelector('#buscar-comunidad');
     if (p) p.value = '';
     if (c) c.value = '';
+    if (b) b.value = '';
     pintarTodo();
   });
   alEvento('#btn-exportar', 'click', exportarExcel);

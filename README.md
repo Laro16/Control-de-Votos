@@ -11,6 +11,7 @@ censo-politico/
 ├── manifest.json         → configuración PWA
 ├── sw.js                 → caché de archivos locales
 ├── tailwind.css          → CSS compilado que carga el navegador
+├── dashboard.css         → estilos específicos del panel de resultados
 ├── input.css             → fuente para recompilar Tailwind
 ├── tailwind.config.js    → configuración de Tailwind
 ├── js/
@@ -55,6 +56,8 @@ sesión para que Supabase emita un token con el rol actualizado.
   1 a 50.
 - Los filtros de partido y comunidad afectan KPIs, gráfica geográfica y Excel.
   La gráfica de partidos conserva la comparación completa y atenúa los demás.
+- El dashboard muestra un resumen por comunidad con familias, votantes por
+  partido, total, líder, búsqueda y acceso rápido al detalle.
 - Las familias marcadas con `anulado = true` no aparecen en el dashboard.
 
 Esta configuración está pensada para uso personal y datos no sensibles. El rol

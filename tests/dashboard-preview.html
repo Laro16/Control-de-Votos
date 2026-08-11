@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vista de prueba · Dashboard CensoGT</title>
+  <link rel="stylesheet" href="../tailwind.css" />
+  <link rel="stylesheet" href="../dashboard.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="../js/configData.js"></script>
+</head>
+<body class="min-h-screen bg-ink-50 font-sans text-ink-900 antialiased">
+  <main id="preview-root" class="mx-auto w-full max-w-5xl px-4 py-6"></main>
+
+  <script>
+    const comunidadesDemo = [
+      'Julunche', 'Cabecera municipal (Tamahú)', 'Sesarb', 'Sequib',
+      'San Pablo Sesooch', 'Pancox', 'Pansup', 'Santa Ana',
+      'Nueva Esperanza', 'El Mirador', 'Chijicay', 'Naxombal',
+    ];
+
+    const filasDemo = [];
+    comunidadesDemo.forEach((comunidad, ci) => {
+      PARTIDOS.forEach((partido, pi) => {
+        const cantidad = ((ci + 3) * (pi + 2)) % 19 + 2;
+        filasDemo.push({
+          familia_id: `F-${ci}-${pi}`,
+          departamento: 'Alta Verapaz',
+          municipio: 'Tamahú',
+          comunidad,
+          caserio: ci % 2 ? `Sector ${ci + 1}` : '',
+          barrio: '',
+          direccion: '',
+          nombre_familia: `Familia ${ci + 1}-${pi + 1}`,
+          telefono: '',
+          registrado_por: 'vista@prueba.local',
+          fecha_registro: new Date(2026, 7, 11, 8, ci).toISOString(),
+          partido: partido.id,
+          cantidad,
+        });
+      });
+    });
+
+    window.sb = {
+      auth: {
+        async getSession() {
+          return {
+            data: {
+              session: { user: { app_metadata: { role: 'admin' } } },
+            },
+          };
+        },
+      },
+      from() {
+        return {
+          select() { return this; },
+          async order() { return { data: filasDemo, error: null }; },
+        };
+      },
+    };
+    window.toast = () => {};
+
+    async function iniciarVista() {
+      const html = await fetch('../index.html').then((r) => r.text());
+      const documento = new DOMParser().parseFromString(html, 'text/html');
+      const dashboard = documento.querySelector('#section-dashboard');
+      dashboard.classList.remove('hidden');
+      document.querySelector('#preview-root').appendChild(dashboard);
+
+      const script = document.createElement('script');
+      script.src = '../js/dashboard.js';
+      script.onload = () => {
+        document.dispatchEvent(new Event('DOMContentLoaded'));
+        initDashboard();
+      };
+      document.body.appendChild(script);
+    }
+
+    iniciarVista();
+  </script>
+</body>
+</html>

@@ -12,7 +12,7 @@
 // para que se vean las actualizaciones.
 // ============================================================================
 
-const VERSION = 'censo-v12';
+const VERSION = 'censo-v13';
 
 // Lo mínimo para que la app abra sin internet la primera vez.
 // Las imágenes de partido NO van acá a propósito: cambian seguido y no
@@ -22,6 +22,7 @@ const APP_SHELL = [
   './index.html',
   './manifest.json',
   './tailwind.css',
+  './dashboard.css',
   './js/configData.js',
   './js/supabaseClient.js',
   './js/app.js',
