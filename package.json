@@ -1,0 +1,8 @@
+{
+  "name": "censogt",
+  "private": true,
+  "scripts": {
+    "serve": "node tests/serve.mjs",
+    "test": "node tests/smoke.mjs"
+  }
+}

@@ -1,14 +1,7 @@
 -- ============================================================================
--- CENSO POLÍTICO — Configuración completa de Supabase
--- Ejecutar TODO este archivo en: Supabase → SQL Editor → New query → Run
--- ============================================================================
--- Arquitectura de seguridad:
---   · Las tablas quedan BLOQUEADAS por RLS: nadie puede insertarles ni
---     leerlas directo con la anon key (que viaja visible en el código JS).
---   · La ÚNICA vía de escritura es la función registrar_familia(payload),
---     que valida e inserta familia + votos en una sola transacción.
---   · La lectura (dashboard) solo funciona con una sesión autenticada:
---     un único usuario creado en Authentication → Users (ver README, paso 3).
+-- CENSOGT — Configuración completa de Supabase
+-- Fuente de verdad del esquema. Se puede ejecutar en una base nueva o volver a
+-- ejecutar después de actualizar el proyecto.
 -- ============================================================================
 
 -- 1. TABLAS ------------------------------------------------------------------
@@ -17,35 +10,85 @@ create table if not exists public.familias (
   id             uuid primary key default gen_random_uuid(),
   departamento   text not null,
   municipio      text not null,
-  aldea          text,
+  comunidad      text,
   caserio        text,
   barrio         text,
+  direccion      text,
   nombre_familia text not null,
   telefono       text,
-  registrado_por text,                 -- 'digitador' | 'admin' (viene del login local)
-  created_at     timestamptz not null default now()
+  registrado_por text,
+  created_at     timestamptz not null default now(),
+  anulado        boolean not null default false,
+  anulado_en     timestamptz,
+  anulado_por    text
 );
 
 create table if not exists public.votos (
   id          uuid primary key default gen_random_uuid(),
   familia_id  uuid not null references public.familias(id) on delete cascade,
-  partido     text not null,           -- sigla del partido (debe existir en configData.js)
+  partido     text not null,
   cantidad    integer not null check (cantidad between 1 and 50),
   created_at  timestamptz not null default now()
 );
 
-create index if not exists idx_familias_ubicacion on public.familias (departamento, municipio);
-create index if not exists idx_votos_partido      on public.votos (partido);
-create index if not exists idx_votos_familia      on public.votos (familia_id);
+-- Completa instalaciones antiguas sin borrar información existente.
+alter table public.familias add column if not exists comunidad text;
+alter table public.familias add column if not exists direccion text;
+alter table public.familias add column if not exists anulado boolean not null default false;
+alter table public.familias add column if not exists anulado_en timestamptz;
+alter table public.familias add column if not exists anulado_por text;
 
--- 2. SEGURIDAD (RLS) ---------------------------------------------------------
--- RLS activado y SIN políticas de INSERT/UPDATE/DELETE:
--- por defecto todo queda denegado, incluso con la anon key.
+-- Versiones anteriores llamaban "aldea" al campo que hoy se llama "comunidad".
+-- Si esa columna todavía existe, sus valores se conservan automáticamente.
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'familias'
+      and column_name = 'aldea'
+  ) then
+    execute 'update public.familias set comunidad = coalesce(comunidad, aldea) where aldea is not null';
+  end if;
+end;
+$$;
+
+create index if not exists idx_familias_comunidad
+  on public.familias (departamento, municipio, comunidad);
+create index if not exists idx_familias_activas
+  on public.familias (anulado);
+create index if not exists idx_votos_partido
+  on public.votos (partido);
+create index if not exists idx_votos_familia
+  on public.votos (familia_id);
+
+-- Sólo admite los partidos configurados actualmente. NOT VALID evita que una
+-- instalación antigua falle por datos históricos, pero protege filas nuevas.
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'votos_partido_valido'
+      and conrelid = 'public.votos'::regclass
+  ) then
+    alter table public.votos
+      add constraint votos_partido_valido
+      check (partido in ('P1', 'P2', 'P3', 'P4', 'P5', 'P6')) not valid;
+  end if;
+end;
+$$;
+
+-- 2. ACCESO BÁSICO -----------------------------------------------------------
+-- La aplicación usa Supabase Auth. Todos los usuarios autenticados pueden
+-- registrar datos; el rol admin controla la visibilidad del dashboard.
 
 alter table public.familias enable row level security;
 alter table public.votos    enable row level security;
 
--- Lectura SOLO para sesiones autenticadas (la cuenta que usa el dashboard).
+drop policy if exists "lectura_solo_admin_familias" on public.familias;
+drop policy if exists "lectura_solo_admin_votos" on public.votos;
+
 drop policy if exists "lectura_autenticada_familias" on public.familias;
 create policy "lectura_autenticada_familias"
   on public.familias for select
@@ -58,9 +101,9 @@ create policy "lectura_autenticada_votos"
   to authenticated
   using (true);
 
--- 3. FUNCIÓN DE INGRESO (única puerta de escritura) --------------------------
--- security definer: corre con permisos del dueño y salta el RLS,
--- pero solo hace lo que está programado aquí (insertar, nunca leer/borrar).
+-- 3. FUNCIÓN DE INGRESO ------------------------------------------------------
+-- Inserta familia y votos en una sola transacción y valida los datos que el
+-- formulario necesita para funcionar correctamente.
 
 create or replace function public.registrar_familia(payload jsonb)
 returns uuid
@@ -71,8 +114,8 @@ as $$
 declare
   nueva_familia uuid;
   voto jsonb;
+  correo_usuario text;
 begin
-  -- Validaciones mínimas del lado del servidor
   if coalesce(trim(payload->>'departamento'), '') = '' then
     raise exception 'departamento es obligatorio';
   end if;
@@ -82,50 +125,80 @@ begin
   if coalesce(trim(payload->>'nombre_familia'), '') = '' then
     raise exception 'nombre_familia es obligatorio';
   end if;
+  if jsonb_typeof(coalesce(payload->'votos', '[]'::jsonb)) <> 'array' then
+    raise exception 'votos debe ser una lista';
+  end if;
   if jsonb_array_length(coalesce(payload->'votos', '[]'::jsonb)) = 0 then
     raise exception 'debe incluir al menos una línea de votos';
   end if;
+  if jsonb_array_length(payload->'votos') > 6 then
+    raise exception 'no puede incluir más de seis partidos';
+  end if;
+  if exists (
+    select 1
+    from jsonb_array_elements(payload->'votos') as elementos(elemento)
+    where coalesce(elemento->>'partido', '') not in ('P1', 'P2', 'P3', 'P4', 'P5', 'P6')
+  ) then
+    raise exception 'la lista contiene un partido no válido';
+  end if;
+  if exists (
+    select elemento->>'partido'
+    from jsonb_array_elements(payload->'votos') as elementos(elemento)
+    group by elemento->>'partido'
+    having count(*) > 1
+  ) then
+    raise exception 'un partido no puede repetirse en la misma familia';
+  end if;
+
+  correo_usuario := coalesce(nullif(auth.jwt()->>'email', ''), 'usuario');
 
   insert into public.familias
-    (departamento, municipio, aldea, caserio, barrio,
+    (departamento, municipio, comunidad, caserio, barrio, direccion,
      nombre_familia, telefono, registrado_por)
   values
     (trim(payload->>'departamento'),
      trim(payload->>'municipio'),
-     nullif(trim(coalesce(payload->>'aldea',   '')), ''),
-     nullif(trim(coalesce(payload->>'caserio', '')), ''),
-     nullif(trim(coalesce(payload->>'barrio',  '')), ''),
+     nullif(trim(coalesce(payload->>'comunidad', '')), ''),
+     nullif(trim(coalesce(payload->>'caserio',   '')), ''),
+     nullif(trim(coalesce(payload->>'barrio',    '')), ''),
+     nullif(trim(coalesce(payload->>'direccion', '')), ''),
      trim(payload->>'nombre_familia'),
-     nullif(trim(coalesce(payload->>'telefono','')), ''),
-     nullif(trim(coalesce(payload->>'registrado_por','')), ''))
+     nullif(trim(coalesce(payload->>'telefono',  '')), ''),
+     correo_usuario)
   returning id into nueva_familia;
 
   for voto in select * from jsonb_array_elements(payload->'votos') loop
+    if coalesce(voto->>'cantidad', '') !~ '^[0-9]+$' then
+      raise exception 'la cantidad de votos debe ser un número entero';
+    end if;
+    if (voto->>'cantidad')::integer not between 1 and 50 then
+      raise exception 'cada cantidad debe estar entre 1 y 50';
+    end if;
+
     insert into public.votos (familia_id, partido, cantidad)
-    values (nueva_familia, voto->>'partido', (voto->>'cantidad')::int);
+    values (nueva_familia, voto->>'partido', (voto->>'cantidad')::integer);
   end loop;
 
   return nueva_familia;
 end;
 $$;
 
--- Solo la app (anon) y sesiones autenticadas pueden ejecutarla.
-revoke all on function public.registrar_familia(jsonb) from public;
-grant execute on function public.registrar_familia(jsonb) to anon, authenticated;
+revoke all on function public.registrar_familia(jsonb) from public, anon;
+grant execute on function public.registrar_familia(jsonb) to authenticated;
 
--- 4. VISTA PARA EL DASHBOARD --------------------------------------------------
--- security_invoker = on → la vista respeta el RLS de las tablas de abajo,
--- por lo tanto solo una sesión autenticada puede consultarla.
+-- 4. VISTA PARA EL DASHBOARD -------------------------------------------------
 
-create or replace view public.vista_censo
+drop view if exists public.vista_censo;
+create view public.vista_censo
 with (security_invoker = on) as
 select
   f.id            as familia_id,
   f.departamento,
   f.municipio,
-  f.aldea,
+  f.comunidad,
   f.caserio,
   f.barrio,
+  f.direccion,
   f.nombre_familia,
   f.telefono,
   f.registrado_por,
@@ -133,12 +206,24 @@ select
   v.partido,
   v.cantidad
 from public.votos v
-join public.familias f on f.id = v.familia_id;
+join public.familias f on f.id = v.familia_id
+where f.anulado = false;
 
 grant select on public.vista_censo to authenticated;
 
--- ============================================================================
--- FIN DE CAMPAÑA (guardar para después — NO ejecutar ahora):
--- borrar el censo completo cuando el cliente cierre el proyecto:
---   truncate table public.votos, public.familias;
--- ============================================================================
+-- 5. ASIGNAR EL ROL DE ADMINISTRADOR ----------------------------------------
+-- Crear primero el usuario en Authentication → Users. Después cambiar el
+-- correo de ejemplo y ejecutar únicamente este UPDATE.
+
+update auth.users
+set raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb)
+  || '{"role":"admin"}'::jsonb
+where email = 'admin@censo.app';
+
+-- Para quitar el rol de administrador:
+-- update auth.users
+-- set raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb) - 'role'
+-- where email = 'admin@censo.app';
+
+-- FIN DE CAMPAÑA (NO ejecutar mientras se necesiten los datos):
+-- truncate table public.votos, public.familias;

@@ -1,75 +1,88 @@
 # CensoGT — Censo de popularidad casa por casa
 
-PWA en HTML + JavaScript puro + Tailwind (CDN) + Supabase. Sin build: se sube tal cual a GitHub y se despliega en Vercel como sitio estático.
+PWA en HTML, JavaScript puro, Tailwind precompilado y Supabase. No necesita
+proceso de build para desplegarse: se publica como sitio estático.
 
 ## Estructura
 
 ```
 censo-politico/
-├── index.html            → login + vistas por rol (ingreso / dashboard)
-├── manifest.json         → PWA (cambiar nombre e íconos)
-├── sw.js                 → service worker (subir VERSION en cada deploy)
-├── tailwind.css          → Tailwind YA COMPILADO (esto carga el navegador)
-├── input.css             → fuente de la compilación (no se carga)
-├── tailwind.config.js    → config de la compilación (no se carga)
+├── index.html            → login, formulario y dashboard
+├── manifest.json         → configuración PWA
+├── sw.js                 → caché de archivos locales
+├── tailwind.css          → CSS compilado que carga el navegador
+├── input.css             → fuente para recompilar Tailwind
+├── tailwind.config.js    → configuración de Tailwind
 ├── js/
-│   ├── configData.js     → PARTIDOS y UBICACIONES (llenar desde el Excel)
-│   ├── supabaseClient.js → URL y anon key del proyecto (cambiar)
-│   ├── app.js            → login, cascada de ubicación, votos, guardado
-│   └── dashboard.js      → gráficas, filtros y exportación a Excel
-├── img/                  → logo, íconos PWA y logos de partidos (placeholders)
-└── sql/setup.sql         → configuración completa de la base de datos
+│   ├── configData.js     → partidos y comunidades
+│   ├── supabaseClient.js → URL y anon key del proyecto
+│   ├── app.js            → sesión, formulario y guardado
+│   └── dashboard.js      → métricas, filtros, gráficas y Excel
+├── img/                  → logo, iconos y partidos
+└── sql/setup.sql         → fuente de verdad de la base de datos
 ```
 
-## Puesta en marcha (una sola vez)
+Los archivos `SQL DE SUPABASE.txt` y `POLITICAS SUPABASE.txt` sólo indican que
+existieron configuraciones anteriores. No deben ejecutarse; toda modificación
+de la base está consolidada en `sql/setup.sql`.
 
-1. **Crear proyecto** en supabase.com → New project.
-2. **SQL Editor** → New query → pegar los bloques 0–4 de `sql/setup.sql` → Run.
-3. **Crear los usuarios reales**: Authentication → Users → *Add user*, uno por
-   persona (ej. `digitador1@censo.app`, `admin@censo.app`), cada uno con su
-   contraseña y **Auto Confirm User** marcado. Los correos no necesitan
-   existir de verdad; el dominio debe coincidir con `LOGIN_DOMAIN` en
-   `js/app.js` para que en el login baste escribir `digitador1`.
-4. **Dar rol de admin**: ejecutar el BLOQUE 5 de `sql/setup.sql` (consulta
-   nueva) con el correo del administrador. Quien no tenga rol entra como
-   Digitador.
-5. **Project Settings → API**: copiar *Project URL* y *anon public key* a
+## Puesta en marcha
+
+1. Crear un proyecto en Supabase.
+2. En **Authentication → Users**, crear los usuarios necesarios con
+   **Auto Confirm User** activado. Ejemplos: `digitador1@censo.app` y
+   `admin@censo.app`.
+3. Verificar que el dominio coincida con `LOGIN_DOMAIN` en `js/app.js`.
+4. En el bloque 5 de `sql/setup.sql`, cambiar `admin@censo.app` por el correo
+   que usará el administrador.
+5. Ejecutar todo `sql/setup.sql` desde **SQL Editor**. El script también puede
+   volver a ejecutarse sobre una instalación anterior: completa los campos
+   faltantes y migra `aldea` a `comunidad` sin borrar registros.
+6. Copiar la **Project URL** y la **anon public key** a
    `js/supabaseClient.js`.
-6. Subir la carpeta a un repo de GitHub → Vercel → *Import Project* → Deploy
-   (framework: *Other*, sin build command). El service worker requiere HTTPS,
-   que Vercel ya da.
+7. Publicar la carpeta en Vercel como framework **Other**, sin build command.
 
-## Seguridad — leer antes de entregar al cliente
+Después de asignar o quitar el rol de administrador, cerrar y volver a iniciar
+sesión para que Supabase emita un token con el rol actualizado.
 
-- **No hay contraseñas en el código.** Todas viven en Supabase Auth; el login
-  de la app es un login real (`signInWithPassword`).
-- La URL y la *anon key* de `js/supabaseClient.js` **sí son visibles** en el
-  navegador — es inevitable y es su diseño: la anon key es pública. La
-  protección no depende de esconderla, sino del RLS:
-  - **Escribir** exige sesión iniciada (la anon key sola no inserta nada).
-  - **Leer** exige además el rol `admin` dentro del token, que solo se asigna
-    por SQL (BLOQUE 5). Un digitador logueado tampoco puede descargar el censo.
-- `registrado_por` lo pone el servidor con el correo de la sesión: auditoría
-  real de quién capturó cada familia, imposible de falsificar desde la app.
-- Para dar de baja a alguien (p. ej. un digitador que deja la campaña):
-  Authentication → Users → borrar el usuario. Nada que redeployar.
+## Funcionamiento
 
-## Datos sensibles
+- Todo usuario autenticado puede registrar familias y votos.
+- Los usuarios con `app_metadata.role = "admin"` ven el dashboard.
+- La base registra automáticamente el correo de la sesión en
+  `registrado_por`.
+- Cada familia puede registrar una sola línea por partido, con cantidades de
+  1 a 50.
+- Los filtros de partido y comunidad afectan KPIs, gráfica geográfica y Excel.
+  La gráfica de partidos conserva la comparación completa y atenúa los demás.
+- Las familias marcadas con `anulado = true` no aparecen en el dashboard.
 
-La base guarda preferencia política de familias identificadas con nombre,
-teléfono y ubicación exacta. Recomendaciones para el cliente: pedir
-consentimiento verbal en cada encuesta, evaluar si el teléfono es
-imprescindible, limitar quién tiene la clave de admin, y **borrar la base al
-cerrar la campaña** (el `truncate` está comentado al final de `setup.sql`).
+Esta configuración está pensada para uso personal y datos no sensibles. El rol
+de administrador organiza la interfaz; no pretende sustituir una revisión de
+seguridad para información privada o un sistema público.
 
 ## Mantenimiento
 
-- Datos geográficos y partidos: editar `js/configData.js` (misma estructura que
-  la plantilla Excel).
-- Cada deploy con cambios: subir `VERSION` en `sw.js` para que los teléfonos
-  actualicen.
-- El CSS de Tailwind está **precompilado** en `tailwind.css` (en la raíz) (no se usa el
-  CDN de runtime, que resultó poco confiable). Si se agregan clases de Tailwind
-  nuevas en `index.html` o en `js/`, hay que regenerarlo:
-  `npx tailwindcss -i input.css -o tailwind.css --minify`
-  (o pedirle a Claude el archivo regenerado junto con el cambio).
+- Partidos y comunidades: editar `js/configData.js`. Si cambia la lista de
+  partidos, actualizar también la validación de `sql/setup.sql`.
+- Al publicar cambios importantes, subir `VERSION` en `sw.js` para limpiar
+  cachés anteriores.
+- Si se agregan clases nuevas de Tailwind, regenerar el CSS:
+
+  ```powershell
+  npx tailwindcss -i input.css -o tailwind.css --minify
+  ```
+
+## Comprobaciones rápidas
+
+```powershell
+npm.cmd test
+node --check js/app.js
+node --check sw.js
+```
+
+Para abrir una copia local sin caché durante el desarrollo:
+
+```powershell
+npm.cmd run serve
+```

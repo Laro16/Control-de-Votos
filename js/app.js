@@ -42,17 +42,28 @@ async function login(e) {
   const email = escrito.includes('@') ? escrito : `${escrito}@${LOGIN_DOMAIN}`;
 
   const errorEl = $('#login-error');
+  const btn = e.currentTarget.querySelector('button[type="submit"]');
   errorEl.classList.add('hidden');
+  btn.disabled = true;
+  btn.textContent = 'Ingresando…';
 
-  const { data, error } = await sb.auth.signInWithPassword({ email, password: clave });
-  if (error) {
-    errorEl.textContent = 'Usuario o contraseña incorrectos.';
+  try {
+    const { data, error } = await sb.auth.signInWithPassword({ email, password: clave });
+    if (error) {
+      errorEl.textContent = 'Usuario o contraseña incorrectos.';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+
+    currentUser = usuarioDesdeSesion(data.session);
+    mostrarApp();
+  } catch (_err) {
+    errorEl.textContent = 'No se pudo conectar. Revisa tu conexión e inténtalo de nuevo.';
     errorEl.classList.remove('hidden');
-    return;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Iniciar sesión';
   }
-
-  currentUser = usuarioDesdeSesion(data.session);
-  mostrarApp();
 }
 
 // El rol viaja DENTRO del token de sesión (app_metadata), asignado desde SQL.
@@ -262,10 +273,12 @@ function seleccionarPartido(id) {
 }
 
 function agregarVoto() {
-  const cantidad = parseInt($('#inp-cantidad').value, 10);
+  const cantidad = Number($('#inp-cantidad').value);
 
   if (!partidoSeleccionado) return toast('Primero selecciona un partido.', 'aviso');
-  if (!Number.isInteger(cantidad) || cantidad < 1) return toast('La cantidad debe ser 1 o más.', 'aviso');
+  if (!Number.isInteger(cantidad) || cantidad < 1 || cantidad > 50) {
+    return toast('La cantidad debe ser un número entero entre 1 y 50.', 'aviso');
+  }
   if (votosFamilia.some((v) => v.partidoId === partidoSeleccionado)) {
     return toast('Ese partido ya está en la lista. Elimínalo para corregir la cantidad.', 'aviso');
   }
@@ -373,6 +386,12 @@ function init() {
     btn.addEventListener('click', () => cambiarSeccion(btn.dataset.seccion))
   );
   $('#btn-agregar-voto').addEventListener('click', agregarVoto);
+  $('#inp-cantidad').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      agregarVoto();
+    }
+  });
   $('#btn-guardar').addEventListener('click', guardarFamilia);
 
   initUbicacion();

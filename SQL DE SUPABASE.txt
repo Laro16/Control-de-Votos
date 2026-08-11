@@ -1,0 +1,5 @@
+ARCHIVO DE REFERENCIA
+
+El esquema completo y ejecutable está en sql/setup.sql.
+Este archivo se conserva únicamente para no confundirlo con una segunda fuente
+de verdad.

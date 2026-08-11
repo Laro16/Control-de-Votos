@@ -118,9 +118,21 @@ const valorDe = (sel) => {
 const partidoFiltro   = () => valorDe('#f-partido');
 const comunidadFiltro = () => valorDe('#f-comunidad');
 
-function filasPorComunidad() {
-  const c = comunidadFiltro();
-  return c ? censoRows.filter((r) => comunidadDe(r) === c) : censoRows;
+// Devuelve un único conjunto de datos coherente para KPIs, gráficas y Excel.
+// La gráfica comparativa de partidos puede omitir sólo ese filtro para seguir
+// mostrando el contexto completo y atenuar los partidos no seleccionados.
+function filasFiltradas({ incluirPartido = true, incluirComunidad = true } = {}) {
+  let filas = censoRows || [];
+  const partido = partidoFiltro();
+  const comunidad = comunidadFiltro();
+
+  if (incluirComunidad && comunidad) {
+    filas = filas.filter((r) => comunidadDe(r) === comunidad);
+  }
+  if (incluirPartido && partido) {
+    filas = filas.filter((r) => r.partido === partido);
+  }
+  return filas;
 }
 
 // --- Logos de partido (precargados para poder dibujarlos en el canvas) ------
@@ -281,12 +293,11 @@ function agrupar(filas, fnClave) {
 }
 
 function pintarResumen() {
-  const filas = filasPorComunidad();               // respeta filtro de comunidad
+  const filas = filasFiltradas();
   const familias = new Set(filas.map((r) => r.familia_id)).size;
   const votos = filas.reduce((s, r) => s + r.cantidad, 0);
 
-  // Cobertura: comunidades con al menos un registro (métrica global del censo)
-  const cubiertas = new Set(censoRows.map(comunidadDe)).size;
+  const cubiertas = new Set(filas.map(comunidadDe)).size;
 
   // Partido líder dentro del ámbito filtrado
   const porPartido = agrupar(filas, (r) => r.partido);
@@ -307,7 +318,11 @@ function pintarResumen() {
   document.querySelector('#card-votos').textContent = votos.toLocaleString('es-GT');
   document.querySelector('#card-comunidades').textContent = cubiertas.toLocaleString('es-GT');
   const totalEl = document.querySelector('#card-comunidades-total');
-  if (totalEl) totalEl.textContent = TOTAL_COMUNIDADES ? `de ${TOTAL_COMUNIDADES} comunidades` : 'comunidades';
+  if (totalEl) {
+    totalEl.textContent = partidoFiltro() || comunidadFiltro()
+      ? 'con el filtro actual'
+      : (TOTAL_COMUNIDADES ? `de ${TOTAL_COMUNIDADES} comunidades` : 'comunidades');
+  }
 
   // Promedio de votos por familia (ayuda a detectar cifras raras al digitar)
   const promEl = document.querySelector('#card-votos-prom');
@@ -320,6 +335,9 @@ function pintarResumen() {
   const cardLider = document.querySelector('#card-lider');
   cardLider.textContent = lider;
   cardLider.style.color = colorLider;
+
+  const liderLabel = document.querySelector('#card-lider-label');
+  if (liderLabel) liderLabel.textContent = partidoFiltro() ? 'Partido filtrado' : 'Partido líder';
 
   const pctEl = document.querySelector('#card-lider-pct');
   if (pctEl) pctEl.innerHTML = siglaLider ? `${pctLider}% de los votos` : '&nbsp;';
@@ -346,7 +364,7 @@ function mostrarVacio(id, mostrar) {
 // --- Gráfica A: votos por partido (barras horizontales, con logo) -------------
 
 function pintarChartPartidos() {
-  const filas = filasPorComunidad();
+  const filas = filasFiltradas({ incluirPartido: false });
   const lugar = comunidadFiltro() || 'todo el municipio';
   document.querySelector('#titulo-chart-partidos').textContent = `Votos por partido · ${lugar}`;
 
@@ -402,9 +420,7 @@ function pintarChartPartidos() {
 function pintarChartComunidad() {
   const partido = partidoFiltro();
   const com = comunidadFiltro();
-
-  let filas = filasPorComunidad();
-  if (partido) filas = filas.filter((r) => r.partido === partido);
+  const filas = filasFiltradas();
 
   // Sin comunidad fija → agrupamos por comunidad.
   // Con una comunidad fija → bajamos un nivel (caserío / barrio) para el detalle.
@@ -495,6 +511,11 @@ async function exportarExcel() {
     return toast('No se cargó ExcelJS (revisa tu conexión y recarga la página).', 'error');
   }
 
+  const filasAmbito = filasFiltradas();
+  if (filasAmbito.length === 0) {
+    return toast('No hay datos que coincidan con los filtros actuales.', 'aviso');
+  }
+
   const btn = document.querySelector('#btn-exportar');
   const textoOriginal = btn.textContent;
   btn.disabled = true;
@@ -507,13 +528,18 @@ async function exportarExcel() {
 
     // Ámbito actual (para que el Excel refleje lo que ve el admin)
     const com = comunidadFiltro();
-    const filasAmbito = filasPorComunidad();
-    const ambito = com || 'Todo el municipio (Tamahú)';
+    const partido = partidoFiltro();
+    const partesAmbito = [];
+    if (com) partesAmbito.push(`Comunidad: ${com}`);
+    if (partido) partesAmbito.push(`Partido: ${nombrePartido(partido)}`);
+    const ambito = partesAmbito.length
+      ? partesAmbito.join(' · ')
+      : 'Todo el municipio (Tamahú)';
 
     // ---- Métricas -----------------------------------------------------------
     const familias = new Set(filasAmbito.map((r) => r.familia_id)).size;
     const votos = filasAmbito.reduce((s, r) => s + r.cantidad, 0);
-    const cubiertas = new Set(censoRows.map(comunidadDe)).size;
+    const cubiertas = new Set(filasAmbito.map(comunidadDe)).size;
 
     const porPartido = [...agrupar(filasAmbito, (r) => r.partido).entries()]
       .sort((a, b) => b[1] - a[1]);
@@ -651,7 +677,7 @@ async function exportarExcel() {
     // HOJA 3 · POR COMUNIDAD (matriz comunidad × partido)
     // ========================================================================
     const wc = wb.addWorksheet('Por comunidad', { views: [{ state: 'frozen', ySplit: 1, xSplit: 1 }] });
-    const siglas = PARTIDOS.map((p) => p.id);
+    const siglas = partido ? [partido] : PARTIDOS.map((p) => p.id);
     wc.columns = [
       { header: 'Comunidad', key: 'com', width: 26 },
       ...siglas.map((s) => ({ header: s, key: s, width: 9 })),
@@ -659,7 +685,7 @@ async function exportarExcel() {
     ];
     // Agregación comunidad → {partido: votos}
     const matriz = new Map();
-    censoRows.forEach((r) => {
+    filasAmbito.forEach((r) => {
       const c = comunidadDe(r);
       if (!matriz.has(c)) matriz.set(c, {});
       matriz.get(c)[r.partido] = (matriz.get(c)[r.partido] || 0) + r.cantidad;

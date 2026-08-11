@@ -12,7 +12,7 @@
 // para que se vean las actualizaciones.
 // ============================================================================
 
-const VERSION = 'censo-v11';
+const VERSION = 'censo-v12';
 
 // Lo mínimo para que la app abra sin internet la primera vez.
 // Las imágenes de partido NO van acá a propósito: cambian seguido y no

@@ -1,0 +1,4 @@
+ARCHIVO DE REFERENCIA
+
+Las políticas vigentes están definidas en sql/setup.sql.
+No ejecutar políticas desde este archivo por separado.
