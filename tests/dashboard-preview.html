@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="../tailwind.css" />
   <link rel="stylesheet" href="../dashboard.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
   <script src="../js/configData.js"></script>
 </head>
 <body class="min-h-screen bg-ink-50 font-sans text-ink-900 antialiased">
@@ -20,11 +21,14 @@
     ];
 
     const filasDemo = [];
+    const personasDemo = [];
     comunidadesDemo.forEach((comunidad, ci) => {
       PARTIDOS.forEach((partido, pi) => {
-        const cantidad = ((ci + 3) * (pi + 2)) % 19 + 2;
+        const esIndividual = partido.id === 'NEUTRAL' && ci % 2 === 0;
+        const cantidad = esIndividual ? 3 + (ci % 3) : ((ci + 3) * (pi + 2)) % 19 + 2;
+        const familiaId = `F-${ci}-${pi}`;
         filasDemo.push({
-          familia_id: `F-${ci}-${pi}`,
+          familia_id: familiaId,
           departamento: 'Alta Verapaz',
           municipio: 'Tamahú',
           comunidad,
@@ -32,12 +36,34 @@
           barrio: '',
           direccion: '',
           nombre_familia: `Familia ${ci + 1}-${pi + 1}`,
-          telefono: '',
+          telefono: `5550 ${String(ci * 10 + pi).padStart(4, '0')}`,
+          modo_registro: esIndividual ? 'PERSONAS' : 'FAMILIA',
           registrado_por: 'vista@prueba.local',
           fecha_registro: new Date(2026, 7, 11, 8, ci).toISOString(),
           partido: partido.id,
           cantidad,
         });
+        if (esIndividual) {
+          for (let personaIndice = 0; personaIndice < cantidad; personaIndice += 1) {
+            personasDemo.push({
+              persona_id: `P-${ci}-${personaIndice}`,
+              familia_id: familiaId,
+              nombre_persona: `Persona neutral ${ci + 1}-${personaIndice + 1}`,
+              telefono_persona: personaIndice % 2 ? '' : `4000 ${ci}${personaIndice}00`,
+              partido: 'NEUTRAL',
+              departamento: 'Alta Verapaz',
+              municipio: 'Tamahú',
+              comunidad,
+              caserio: ci % 2 ? `Sector ${ci + 1}` : '',
+              barrio: '',
+              direccion: '',
+              nombre_familia: `Familia ${ci + 1}-${pi + 1}`,
+              telefono_familia: `5550 ${String(ci * 10 + pi).padStart(4, '0')}`,
+              registrado_por: 'vista@prueba.local',
+              fecha_registro: new Date(2026, 7, 11, 8, ci).toISOString(),
+            });
+          }
+        }
       });
     });
 
@@ -51,14 +77,21 @@
           };
         },
       },
-      from() {
+      from(tabla) {
         return {
           select() { return this; },
-          async order() { return { data: filasDemo, error: null }; },
+          async order() {
+            return { data: tabla === 'vista_personas' ? personasDemo : filasDemo, error: null };
+          },
         };
+      },
+      async rpc(nombre) {
+        if (nombre === 'anular_familia') return { data: true, error: null };
+        return { data: null, error: null };
       },
     };
     window.toast = () => {};
+    window.currentUser = { username: 'admin', role: 'admin' };
 
     async function iniciarVista() {
       const html = await fetch('../index.html').then((r) => r.text());

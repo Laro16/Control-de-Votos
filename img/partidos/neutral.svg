@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-labelledby="title desc">
+  <title id="title">Sin preferencia</title>
+  <desc id="desc">Símbolo neutral con dos líneas iguales dentro de un círculo</desc>
+  <circle cx="48" cy="48" r="41" fill="#F2F4F7" stroke="#667085" stroke-width="6"/>
+  <path d="M29 39h38M29 57h38" fill="none" stroke="#667085" stroke-width="8" stroke-linecap="round"/>
+</svg>

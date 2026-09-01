@@ -12,7 +12,7 @@
 // para que se vean las actualizaciones.
 // ============================================================================
 
-const VERSION = 'censo-v13';
+const VERSION = 'censo-v15';
 
 // Lo mínimo para que la app abra sin internet la primera vez.
 // Las imágenes de partido NO van acá a propósito: cambian seguido y no
@@ -27,7 +27,8 @@ const APP_SHELL = [
   './js/supabaseClient.js',
   './js/app.js',
   './js/dashboard.js',
-  './img/logo.png',
+  './img/logo-censogt.png',
+  './img/partidos/neutral.svg',
   './img/icon-192.png',
   './img/icon-512.png',
 ];

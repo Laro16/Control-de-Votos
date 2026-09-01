@@ -50,7 +50,7 @@
        Evita el parpadeo del login al refrescar con sesión activa.
   ======================================================================= -->
   <div id="view-cargando" class="flex min-h-screen flex-col items-center justify-center gap-4 px-4">
-    <img src="img/logo.png" alt="" class="h-14 w-auto opacity-90" onerror="this.style.display='none'" />
+    <img src="img/logo-censogt.png" alt="" class="brand-loading-logo opacity-90" onerror="this.style.display='none'" />
     <div class="h-8 w-8 animate-spin rounded-full border-2 border-ink-200 border-t-ink-900"></div>
     <p class="text-[13px] text-ink-400">Cargando…</p>
   </div>
@@ -58,9 +58,7 @@
   <div id="view-login" class="hidden min-h-screen items-center justify-center px-4 py-10">
     <div class="w-full max-w-sm">
       <div class="mb-8 text-center">
-        <!-- ⚠️ CAMBIAR: logo real en img/logo.png -->
-        <img src="img/logo.png" alt="Logo" class="mx-auto mb-4 h-16 w-auto" onerror="this.style.display='none'" />
-        <!-- ⚠️ CAMBIAR: nombre real de la app -->
+        <img src="img/logo-censogt.png" alt="Logo de CensoGT" class="brand-login-logo mx-auto mb-4" onerror="this.style.display='none'" />
         <h1 class="font-display text-3xl font-extrabold tracking-tight">CensoGT</h1>
         <p class="mt-1 text-[14px] text-ink-500">Censo de popularidad casa por casa</p>
       </div>
@@ -91,8 +89,9 @@
     <header class="sticky top-0 z-20 border-b border-ink-700 bg-ink-900 text-white">
       <div class="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3">
         <div class="flex items-center gap-2.5">
-          <img src="img/logo.png" alt="" class="h-7 w-auto brightness-0 invert" onerror="this.style.display='none'" />
-          <!-- ⚠️ CAMBIAR: nombre real de la app -->
+          <span class="brand-header-mark">
+            <img src="img/logo-censogt.png" alt="" class="h-full w-full object-contain" onerror="this.parentElement.style.display='none'" />
+          </span>
           <span class="font-display text-lg font-bold tracking-tight">CensoGT</span>
         </div>
         <div class="flex items-center gap-3">
@@ -167,31 +166,81 @@
             </div>
           </fieldset>
 
-          <!-- Paso 3 · Votos -->
+          <!-- Paso 3 · Preferencia -->
           <fieldset class="p-5">
-            <legend class="sr-only">Votos</legend>
-            <p class="eyebrow mb-4">3 · Votos de la familia</p>
+            <legend class="sr-only">Preferencia electoral</legend>
+            <p class="eyebrow mb-4">3 · Preferencia electoral</p>
 
-            <label class="etiqueta">Partido que apoya</label>
-            <div id="chips-partidos" class="mb-4 grid grid-cols-3 gap-2 sm:grid-cols-6"></div>
+            <div class="capture-mode-grid" role="radiogroup" aria-label="Tipo de registro de la familia">
+              <label class="capture-mode-option">
+                <input id="modo-familia" type="radio" name="modo-registro" value="FAMILIA" checked />
+                <span class="capture-mode-card">
+                  <strong>Solo cantidades</strong>
+                  <small>Registro rápido, sin nombres individuales.</small>
+                </span>
+              </label>
+              <label class="capture-mode-option">
+                <input id="modo-personas" type="radio" name="modo-registro" value="PERSONAS" />
+                <span class="capture-mode-card">
+                  <strong>Personas individuales</strong>
+                  <small>Nombres para identificación y seguimiento.</small>
+                </span>
+              </label>
+            </div>
+            <p id="modo-registro-ayuda" class="capture-mode-help" role="status" aria-live="polite">
+              Agrega una cantidad por cada preferencia de la familia.
+            </p>
 
-            <div class="flex items-end gap-3">
-              <div class="w-32">
-                <label for="inp-cantidad" class="etiqueta">Cantidad de votos</label>
-                <input id="inp-cantidad" type="number" min="1" max="50" value="1" class="campo text-center" />
+            <div id="panel-modo-familia">
+              <label class="etiqueta">Partido o sin preferencia</label>
+              <div id="chips-partidos" class="party-choice-grid mb-4"></div>
+
+              <div class="flex items-end gap-3">
+                <div class="w-32">
+                  <label for="inp-cantidad" class="etiqueta">Cantidad de votantes</label>
+                  <input id="inp-cantidad" type="number" min="1" max="50" value="1" class="campo text-center" />
+                </div>
+                <button id="btn-agregar-voto" type="button" class="btn-secundario flex-1 sm:flex-none">+ Agregar a la lista</button>
               </div>
-              <button id="btn-agregar-voto" type="button" class="btn-secundario flex-1 sm:flex-none">+ Agregar a la lista</button>
+
+              <!-- Lista dinámica de preferencia + cantidad -->
+              <div class="mt-5 rounded-lg border border-dashed border-ink-200 bg-ink-50/60">
+                <ul id="lista-votos" class="divide-y divide-ink-100"></ul>
+                <p id="lista-vacia" class="px-4 py-5 text-center text-[13px] text-ink-400">
+                  Todavía no hay votantes agregados. Selecciona una preferencia, indica la cantidad y presiona “Agregar”.
+                </p>
+                <div id="fila-total" class="hidden items-center justify-between border-t border-ink-200 px-4 py-2.5">
+                  <span class="text-[13px] font-semibold text-ink-500">Total de la familia</span>
+                  <span id="total-votos" class="font-display text-lg font-extrabold tabular-nums"></span>
+                </div>
+              </div>
             </div>
 
-            <!-- Lista dinámica de líneas partido + cantidad -->
-            <div class="mt-5 rounded-lg border border-dashed border-ink-200 bg-ink-50/60">
-              <ul id="lista-votos" class="divide-y divide-ink-100"></ul>
-              <p id="lista-vacia" class="px-4 py-5 text-center text-[13px] text-ink-400">
-                Todavía no hay votos agregados. Selecciona un partido, indica la cantidad y presiona “Agregar”.
-              </p>
-              <div id="fila-total" class="hidden items-center justify-between border-t border-ink-200 px-4 py-2.5">
-                <span class="text-[13px] font-semibold text-ink-500">Total de la familia</span>
-                <span id="total-votos" class="font-display text-lg font-extrabold tabular-nums"></span>
+            <div id="panel-modo-personas" class="hidden">
+              <div class="person-entry-grid">
+                <div>
+                  <label for="inp-persona-nombre" class="etiqueta">Nombre de la persona *</label>
+                  <input id="inp-persona-nombre" type="text" class="campo" placeholder="Ej. María López" autocomplete="off" />
+                </div>
+                <div>
+                  <label for="inp-persona-telefono" class="etiqueta">Teléfono personal</label>
+                  <input id="inp-persona-telefono" type="tel" inputmode="tel" class="campo" placeholder="Opcional" autocomplete="off" />
+                </div>
+              </div>
+
+              <label class="etiqueta">Preferencia de la persona *</label>
+              <div id="chips-personas" class="party-choice-grid mb-4"></div>
+              <button id="btn-agregar-persona" type="button" class="btn-secundario w-full">+ Agregar persona</button>
+
+              <div class="mt-5 rounded-lg border border-dashed border-ink-200 bg-ink-50/60">
+                <ul id="lista-personas" class="divide-y divide-ink-100"></ul>
+                <p id="personas-vacia" class="px-4 py-5 text-center text-[13px] text-ink-400">
+                  Todavía no hay personas agregadas. Escribe un nombre, selecciona su preferencia y presiona “Agregar persona”.
+                </p>
+                <div id="fila-total-personas" class="hidden items-center justify-between border-t border-ink-200 px-4 py-2.5">
+                  <span class="text-[13px] font-semibold text-ink-500">Personas identificadas</span>
+                  <span id="total-personas" class="font-display text-lg font-extrabold tabular-nums"></span>
+                </div>
               </div>
             </div>
           </fieldset>
@@ -243,7 +292,7 @@
           </div>
           <div class="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
             <div>
-              <label for="f-partido" class="etiqueta">Partido</label>
+              <label for="f-partido" class="etiqueta">Preferencia</label>
               <select id="f-partido" class="campo"></select>
             </div>
             <div>
@@ -276,7 +325,7 @@
             <p id="card-comunidades-total" class="dash-kpi-help">comunidades</p>
           </article>
           <article class="tarjeta dash-kpi-card" data-tone="lider">
-            <p id="card-lider-label" class="eyebrow">Partido líder</p>
+            <p id="card-lider-label" class="eyebrow">Preferencia principal</p>
             <div class="dash-leader-row">
               <img id="card-lider-logo" src="" alt="" class="hidden h-8 w-8 shrink-0 object-contain" />
               <p id="card-lider" class="dash-kpi-value dash-kpi-leader">—</p>
@@ -285,17 +334,17 @@
           </article>
         </div>
 
-        <!-- Distribución municipal por partido -->
+        <!-- Distribución municipal por preferencia -->
         <section class="tarjeta dash-data-section">
           <div class="dash-section-heading">
             <div>
               <p class="eyebrow">Panorama político</p>
-              <h3 id="titulo-chart-partidos">Votantes por partido</h3>
+              <h3 id="titulo-chart-partidos">Votantes por preferencia</h3>
               <p>Comparación ordenada de mayor a menor.</p>
             </div>
           </div>
           <div class="relative dash-chart-partidos">
-            <canvas id="chart-partidos" role="img" aria-label="Gráfica de votantes por partido"></canvas>
+            <canvas id="chart-partidos" role="img" aria-label="Gráfica de votantes por partido o sin preferencia"></canvas>
             <div id="vacio-partidos" class="absolute inset-0 hidden flex-col items-center justify-center bg-white text-center text-[13px] text-ink-400">
               Aún no hay votos registrados para mostrar.
             </div>
@@ -308,7 +357,7 @@
             <div>
               <p class="eyebrow">Detalle territorial</p>
               <h3>Resumen por comunidad</h3>
-              <p>Familias y votantes de cada partido en una sola vista.</p>
+              <p>Familias y votantes por partido o sin preferencia en una sola vista.</p>
             </div>
             <span id="comunidades-conteo" class="dash-count-pill" aria-live="polite">0 comunidades</span>
           </div>
@@ -324,14 +373,14 @@
                 <option value="total-desc">Más votantes</option>
                 <option value="familias-desc">Más familias</option>
                 <option value="nombre-asc">Nombre A–Z</option>
-                <option value="lider-asc">Partido líder</option>
+                <option value="lider-asc">Preferencia principal</option>
               </select>
             </div>
           </div>
 
           <div class="dash-table-shell" tabindex="0" aria-label="Tabla desplazable de resumen por comunidad">
             <table class="dash-community-table">
-              <caption>Votantes registrados por comunidad y partido</caption>
+              <caption>Votantes registrados por comunidad y preferencia</caption>
               <thead id="tabla-comunidades-head"></thead>
               <tbody id="tabla-comunidades-body"></tbody>
               <tfoot id="tabla-comunidades-foot"></tfoot>
@@ -340,7 +389,48 @@
           <div id="tabla-comunidades-vacia" class="dash-table-empty hidden">
             No hay comunidades que coincidan con la búsqueda o los filtros.
           </div>
-          <p class="dash-table-note">Desliza horizontalmente para ver todos los partidos. Usa “Ver detalle” para filtrar el dashboard por una comunidad.</p>
+          <p class="dash-table-note">Desliza horizontalmente para ver todas las preferencias. Usa “Ver detalle” para filtrar el dashboard por una comunidad.</p>
+        </section>
+
+        <!-- Gestión de registros -->
+        <section id="gestion-registros" class="tarjeta dash-data-section">
+          <div class="dash-section-heading dash-community-heading">
+            <div>
+              <p class="eyebrow">Administración</p>
+              <h3>Registros ingresados</h3>
+              <p>Busca una familia y elimina el registro completo cuando sea necesario.</p>
+            </div>
+            <span id="registros-conteo" class="dash-count-pill" aria-live="polite">0 registros</span>
+          </div>
+
+          <div class="dash-table-toolbar dash-records-toolbar">
+            <div class="dash-search-field">
+              <label for="buscar-registro">Buscar familia, persona, comunidad o usuario</label>
+              <input id="buscar-registro" type="search" placeholder="Ej. María López, familia o Julunche" autocomplete="off" />
+            </div>
+          </div>
+
+          <div class="dash-table-shell dash-records-shell" tabindex="0" aria-label="Tabla desplazable de registros ingresados">
+            <table class="dash-records-table">
+              <caption>Familias registradas disponibles para administración</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Comunidad</th>
+                  <th scope="col">Familia</th>
+                  <th scope="col">Captura</th>
+                  <th scope="col">Votantes</th>
+                  <th scope="col">Preferencias</th>
+                  <th scope="col">Registro</th>
+                  <th scope="col">Acción</th>
+                </tr>
+              </thead>
+              <tbody id="tabla-registros-body"></tbody>
+            </table>
+          </div>
+          <div id="tabla-registros-vacia" class="dash-table-empty hidden">
+            No hay registros que coincidan con la búsqueda o los filtros.
+          </div>
+          <p class="dash-table-note">“Eliminar” anula la familia completa y deja de mostrarla en resultados y exportaciones.</p>
         </section>
 
         <!-- Ranking geográfico -->
@@ -363,7 +453,6 @@
     </main>
 
     <footer class="border-t border-ink-100 py-4 text-center text-[12px] text-ink-400">
-      <!-- ⚠️ CAMBIAR: nombre real de la app -->
       CensoGT · Soluciones Digitales GT
     </footer>
   </div>

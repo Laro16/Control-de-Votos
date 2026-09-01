@@ -4,7 +4,7 @@
 // (Municipalidad de Tamahú, IUSI Catastro-Ortofotos-RIC, año 2021).
 // ============================================================================
 
-// --- PARTIDOS (6) -----------------------------------------------------------
+// --- PREFERENCIAS (6 partidos + opción neutral) -----------------------------
 // id    : LLAVE EN LA BASE DE DATOS. NO CAMBIAR: los votos ya guardados
 //         se reasignarían solos a otro partido.
 // logo  : archivo que CONTIENE la imagen de ese partido.
@@ -17,6 +17,7 @@
 //           P4 Victoria    → p4.png (Victoria)
 //           P5 UNE         → p5.png (UNE)
 //           P6 Elefante    → p6.png (Elefante)
+//           NEUTRAL        → neutral.svg (sin apoyo partidario)
 // color : se usa en las gráficas del dashboard y en las fichas del formulario.
 const PARTIDOS = [
   { id: 'P1', nombre: 'Prosperidad Ciudadana', sigla: 'PC',       color: '#DC2626', logo: 'img/partidos/p1.png' },
@@ -25,6 +26,7 @@ const PARTIDOS = [
   { id: 'P4', nombre: 'Victoria',              sigla: 'VICTORIA', color: '#D97706', logo: 'img/partidos/p4.png' },
   { id: 'P5', nombre: 'UNE',                   sigla: 'UNE',      color: '#7C3AED', logo: 'img/partidos/p5.png' },
   { id: 'P6', nombre: 'Elefante',              sigla: 'ELEFANTE', color: '#0891B2', logo: 'img/partidos/p6.png' },
+  { id: 'NEUTRAL', nombre: 'Sin preferencia',  sigla: 'SIN PREF.', color: '#667085', logo: 'img/partidos/neutral.svg', neutral: true },
 ];
 
 // --- UBICACIONES -------------------------------------------------------------

@@ -48,16 +48,25 @@ sesión para que Supabase emita un token con el rol actualizado.
 
 ## Funcionamiento
 
-- Todo usuario autenticado puede registrar familias y votos.
+- Todo usuario autenticado puede registrar familias y votantes.
 - Los usuarios con `app_metadata.role = "admin"` ven el dashboard.
 - La base registra automáticamente el correo de la sesión en
   `registrado_por`.
-- Cada familia puede registrar una sola línea por partido, con cantidades de
-  1 a 50.
-- Los filtros de partido y comunidad afectan KPIs, gráfica geográfica y Excel.
-  La gráfica de partidos conserva la comparación completa y atenúa los demás.
+- Cada familia elige un modo de captura: **Solo cantidades** (una cantidad por
+  preferencia) o **Personas individuales** (nombre, teléfono opcional y
+  preferencia por persona). Los modos no se mezclan dentro del mismo registro.
+- Además de los seis partidos existe `NEUTRAL`, mostrado como **Sin
+  preferencia**, para quienes no apoyan a ningún partido.
+- Los filtros de preferencia y comunidad afectan KPIs, gráfica geográfica y
+  Excel. La gráfica conserva la comparación completa y atenúa las demás opciones.
 - El dashboard muestra un resumen por comunidad con familias, votantes por
-  partido, total, líder, búsqueda y acceso rápido al detalle.
+  preferencia, total, opción principal, búsqueda y acceso rápido al detalle.
+- El administrador dispone de una lista de registros con búsqueda y botón
+  **Eliminar**. La eliminación es recuperable: marca la familia como anulada y
+  la excluye junto con sus cantidades del dashboard y las exportaciones.
+- El Excel incluye hojas para resumen, detalle familiar, comunidades, personas
+  identificadas y **Seguimiento neutral**. Esta última usa los nombres cuando
+  existen y conserva familia/teléfono cuando sólo se capturaron cantidades.
 - Las familias marcadas con `anulado = true` no aparecen en el dashboard.
 
 Esta configuración está pensada para uso personal y datos no sensibles. El rol
@@ -68,6 +77,9 @@ seguridad para información privada o un sistema público.
 
 - Partidos y comunidades: editar `js/configData.js`. Si cambia la lista de
   partidos, actualizar también la validación de `sql/setup.sql`.
+- Después de incorporar `NEUTRAL`, personas individuales o la administración
+  de registros en una base existente, volver a ejecutar `sql/setup.sql` en
+  Supabase SQL Editor.
 - Al publicar cambios importantes, subir `VERSION` en `sw.js` para limpiar
   cachés anteriores.
 - Si se agregan clases nuevas de Tailwind, regenerar el CSS:

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <base href="../" />
+  <title>Vista de prueba · Preferencias CensoGT</title>
+  <link rel="stylesheet" href="../tailwind.css" />
+  <link rel="stylesheet" href="../dashboard.css" />
+  <script src="../js/configData.js"></script>
+</head>
+<body class="min-h-screen bg-ink-50 font-sans text-ink-900 antialiased">
+  <main id="preview-root" class="mx-auto w-full max-w-2xl px-4 py-8"></main>
+  <script>
+    window.__CENSOGT_PREVIEW__ = true;
+
+    async function iniciarVista() {
+      const html = await fetch('index.html').then((r) => r.text());
+      const documento = new DOMParser().parseFromString(html, 'text/html');
+      const fieldsets = documento.querySelectorAll('#section-ingreso fieldset');
+      document.querySelector('#preview-root').appendChild(fieldsets[2]);
+
+      const script = document.createElement('script');
+      script.src = 'js/app.js';
+      script.onload = () => {
+        renderChipsPartidos();
+        renderListaVotos();
+        renderListaPersonas();
+        cambiarModoRegistro('FAMILIA', { forzar: true });
+        document.querySelectorAll('input[name="modo-registro"]').forEach((radio) =>
+          radio.addEventListener('change', () => cambiarModoRegistro(radio.value))
+        );
+        document.querySelector('#btn-agregar-voto').addEventListener('click', agregarVoto);
+        document.querySelector('#btn-agregar-persona').addEventListener('click', agregarPersona);
+      };
+      document.body.appendChild(script);
+    }
+
+    iniciarVista();
+  </script>
+</body>
+</html>

@@ -5,7 +5,7 @@
 // --- 1. AUTENTICACIÓN --------------------------------------------------------
 // Ya NO hay credenciales en el código. Todos los usuarios (digitadores y
 // administradores) se crean en Supabase → Authentication → Users, y el rol
-// de administrador se asigna con el BLOQUE 5 de sql/setup.sql.
+// de administrador se asigna con el BLOQUE 6 de sql/setup.sql.
 // Quien no tiene rol asignado entra como Digitador (solo ingreso de datos).
 //
 // Comodidad para el login: si el usuario escribe sin '@', se le agrega este
@@ -15,7 +15,10 @@ const LOGIN_DOMAIN = 'censo.app';   // ⚠️ mismo dominio de los correos cread
 // --- Estado global ----------------------------------------------------------
 let currentUser = null;        // { username, role }
 let votosFamilia = [];         // [{ partidoId, cantidad }]
+let personasFamilia = [];      // [{ nombre, telefono, partidoId }]
 let partidoSeleccionado = null;
+let partidoPersonaSeleccionado = null;
+let modoRegistro = 'FAMILIA';
 
 // --- Helpers de DOM ---------------------------------------------------------
 const $ = (sel) => document.querySelector(sel);
@@ -235,19 +238,22 @@ function limpiarDetalleUbicacion() {
 }
 
 // ============================================================================
-// 5. VOTOS: FICHAS DE PARTIDO + LISTA DINÁMICA
+// 5. VOTOS: FICHAS DE PREFERENCIA + LISTA DINÁMICA
 // ============================================================================
 // Nota de diseño: un <select> nativo NO puede mostrar imágenes, por eso los
 // partidos se eligen con fichas (logo + sigla), más rápidas en el celular.
 
-function renderChipsPartidos() {
-  const cont = $('#chips-partidos');
+function renderChipsPreferencias(contenedor, grupo) {
+  const cont = $(contenedor);
+  if (!cont) return;
   cont.innerHTML = '';
   PARTIDOS.forEach((p) => {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.dataset.partido = p.id;
+    btn.dataset.grupo = grupo;
     btn.setAttribute('aria-pressed', 'false');
+    btn.setAttribute('aria-label', p.nombre);
     btn.title = p.nombre;
     btn.className =
       'chip-partido flex flex-col items-center gap-1.5 rounded-lg border border-ink-200 bg-white px-2 py-2.5 transition hover:border-ink-400 focus-visible:ring-2 focus-visible:ring-ink-400';
@@ -256,14 +262,21 @@ function renderChipsPartidos() {
         <img src="${p.logo}" alt="" class="h-9 w-9 object-contain" onerror="this.remove()" />
       </span>
       <span class="text-[12px] font-bold" style="color:${p.color}">${p.sigla}</span>`;
-    btn.addEventListener('click', () => seleccionarPartido(p.id));
+    btn.addEventListener('click', () => seleccionarPreferencia(grupo, p.id));
     cont.appendChild(btn);
   });
 }
 
-function seleccionarPartido(id) {
-  partidoSeleccionado = id;
-  document.querySelectorAll('.chip-partido').forEach((btn) => {
+function renderChipsPartidos() {
+  renderChipsPreferencias('#chips-partidos', 'familia');
+  renderChipsPreferencias('#chips-personas', 'personas');
+}
+
+function seleccionarPreferencia(grupo, id) {
+  if (grupo === 'personas') partidoPersonaSeleccionado = id;
+  else partidoSeleccionado = id;
+
+  document.querySelectorAll(`.chip-partido[data-grupo="${grupo}"]`).forEach((btn) => {
     const activo = btn.dataset.partido === id;
     btn.setAttribute('aria-pressed', String(activo));
     btn.classList.toggle('ring-2', activo);
@@ -272,15 +285,60 @@ function seleccionarPartido(id) {
   });
 }
 
+function seleccionarPartido(id) {
+  seleccionarPreferencia('familia', id);
+}
+
+function cambiarModoRegistro(nuevoModo, { forzar = false } = {}) {
+  if (!['FAMILIA', 'PERSONAS'].includes(nuevoModo)) return;
+  const cambia = nuevoModo !== modoRegistro;
+  const datosActuales = modoRegistro === 'FAMILIA' ? votosFamilia.length : personasFamilia.length;
+
+  if (cambia && datosActuales > 0 && !forzar) {
+    const confirmado = window.confirm(
+      'Cambiar el tipo de registro borrará la lista que todavía no has guardado. ¿Deseas continuar?'
+    );
+    if (!confirmado) {
+      const anterior = $(`input[name="modo-registro"][value="${modoRegistro}"]`);
+      if (anterior) anterior.checked = true;
+      return;
+    }
+    if (modoRegistro === 'FAMILIA') {
+      votosFamilia = [];
+      partidoSeleccionado = null;
+      renderListaVotos();
+    } else {
+      personasFamilia = [];
+      partidoPersonaSeleccionado = null;
+      renderListaPersonas();
+    }
+  }
+
+  modoRegistro = nuevoModo;
+  const radio = $(`input[name="modo-registro"][value="${modoRegistro}"]`);
+  if (radio) radio.checked = true;
+  $('#panel-modo-familia')?.classList.toggle('hidden', modoRegistro !== 'FAMILIA');
+  $('#panel-modo-personas')?.classList.toggle('hidden', modoRegistro !== 'PERSONAS');
+
+  const ayuda = $('#modo-registro-ayuda');
+  if (ayuda) {
+    ayuda.textContent = modoRegistro === 'PERSONAS'
+      ? 'Cada persona cuenta como un votante y podrá aparecer por nombre en el Excel.'
+      : 'Agrega una cantidad por cada preferencia de la familia.';
+  }
+
+  if (modoRegistro === 'PERSONAS') $('#inp-persona-nombre')?.focus();
+}
+
 function agregarVoto() {
   const cantidad = Number($('#inp-cantidad').value);
 
-  if (!partidoSeleccionado) return toast('Primero selecciona un partido.', 'aviso');
+  if (!partidoSeleccionado) return toast('Primero selecciona una preferencia.', 'aviso');
   if (!Number.isInteger(cantidad) || cantidad < 1 || cantidad > 50) {
     return toast('La cantidad debe ser un número entero entre 1 y 50.', 'aviso');
   }
   if (votosFamilia.some((v) => v.partidoId === partidoSeleccionado)) {
-    return toast('Ese partido ya está en la lista. Elimínalo para corregir la cantidad.', 'aviso');
+    return toast('Esa preferencia ya está en la lista. Elimínala para corregir la cantidad.', 'aviso');
   }
 
   votosFamilia.push({ partidoId: partidoSeleccionado, cantidad });
@@ -325,6 +383,79 @@ function renderListaVotos() {
   filaTotal.classList.toggle('flex', votosFamilia.length > 0);
 }
 
+function agregarPersona() {
+  const nombre = $('#inp-persona-nombre').value.trim();
+  const telefono = $('#inp-persona-telefono').value.trim();
+
+  if (!nombre) return toast('Escribe el nombre de la persona.', 'aviso');
+  if (!partidoPersonaSeleccionado) return toast('Selecciona la preferencia de la persona.', 'aviso');
+  if (personasFamilia.length >= 50) return toast('Una familia admite hasta 50 personas.', 'aviso');
+
+  personasFamilia.push({
+    nombre,
+    telefono,
+    partidoId: partidoPersonaSeleccionado,
+  });
+  renderListaPersonas();
+  $('#inp-persona-nombre').value = '';
+  $('#inp-persona-telefono').value = '';
+  seleccionarPreferencia('personas', null);
+  $('#inp-persona-nombre').focus();
+}
+
+function quitarPersona(indice) {
+  personasFamilia.splice(indice, 1);
+  renderListaPersonas();
+}
+
+function renderListaPersonas() {
+  const lista = $('#lista-personas');
+  if (!lista) return;
+  lista.innerHTML = '';
+
+  personasFamilia.forEach((persona, indice) => {
+    const p = PARTIDOS.find((x) => x.id === persona.partidoId) || {
+      sigla: persona.partidoId,
+      nombre: persona.partidoId,
+      color: '#7C8496',
+    };
+    const li = document.createElement('li');
+    li.className = 'flex items-center gap-3 px-4 py-3';
+
+    const badge = document.createElement('span');
+    badge.className = 'inline-flex h-7 min-w-[3rem] items-center justify-center rounded-md px-2 text-[11px] font-extrabold text-white';
+    badge.style.background = p.color;
+    badge.textContent = p.sigla;
+
+    const datos = document.createElement('span');
+    datos.className = 'min-w-0 flex-1';
+    const nombre = document.createElement('strong');
+    nombre.className = 'block truncate text-[14px]';
+    nombre.textContent = persona.nombre;
+    datos.appendChild(nombre);
+    const meta = document.createElement('small');
+    meta.className = 'mt-0.5 block truncate text-[11px] text-ink-400';
+    meta.textContent = persona.telefono ? `${p.nombre} · ${persona.telefono}` : p.nombre;
+    datos.appendChild(meta);
+
+    const quitar = document.createElement('button');
+    quitar.type = 'button';
+    quitar.className = 'rounded p-1 text-ink-400 hover:bg-red-50 hover:text-red-600';
+    quitar.setAttribute('aria-label', `Quitar a ${persona.nombre}`);
+    quitar.textContent = '✕';
+    quitar.addEventListener('click', () => quitarPersona(indice));
+
+    li.append(badge, datos, quitar);
+    lista.appendChild(li);
+  });
+
+  $('#total-personas').textContent = personasFamilia.length.toLocaleString('es-GT');
+  $('#personas-vacia').classList.toggle('hidden', personasFamilia.length > 0);
+  const filaTotal = $('#fila-total-personas');
+  filaTotal.classList.toggle('hidden', personasFamilia.length === 0);
+  filaTotal.classList.toggle('flex', personasFamilia.length > 0);
+}
+
 // ============================================================================
 // 6. GUARDAR FAMILIA (RPC registrar_familia)
 // ============================================================================
@@ -338,15 +469,30 @@ async function guardarFamilia() {
   if (!u.municipio) return toast('Selecciona el municipio.', 'aviso');
   if (!nombre) return toast('Escribe el nombre o identificador de la familia.', 'aviso');
   if (!telefono) return toast('Escribe el teléfono de la familia.', 'aviso');
-  if (votosFamilia.length === 0) return toast('Agrega al menos una línea de votos.', 'aviso');
+  if (modoRegistro === 'FAMILIA' && votosFamilia.length === 0) {
+    return toast('Agrega al menos una línea de votantes.', 'aviso');
+  }
+  if (modoRegistro === 'PERSONAS' && personasFamilia.length === 0) {
+    return toast('Agrega al menos una persona.', 'aviso');
+  }
 
   const payload = {
     ...u,
     nombre_familia: nombre,
     telefono,
+    modo_registro: modoRegistro,
     // registrado_por ya no se envía: el servidor lo toma del correo de la
     // sesión (no se puede falsificar desde el navegador).
-    votos: votosFamilia.map((v) => ({ partido: v.partidoId, cantidad: v.cantidad })),
+    votos: modoRegistro === 'FAMILIA'
+      ? votosFamilia.map((v) => ({ partido: v.partidoId, cantidad: v.cantidad }))
+      : [],
+    personas: modoRegistro === 'PERSONAS'
+      ? personasFamilia.map((persona) => ({
+          nombre: persona.nombre,
+          telefono: persona.telefono,
+          partido: persona.partidoId,
+        }))
+      : [],
   };
 
   const btn = $('#btn-guardar');
@@ -357,14 +503,22 @@ async function guardarFamilia() {
     const { error } = await sb.rpc('registrar_familia', { payload });
     if (error) throw error;
 
-    toast('Familia registrada correctamente.');
+    toast(modoRegistro === 'PERSONAS'
+      ? `Familia registrada con ${personasFamilia.length} personas.`
+      : 'Familia registrada correctamente.');
     // Se conserva depto/municipio/comunidad/caserío/barrio: el digitador sigue
     // casa por casa en el mismo lugar. La dirección es de CADA casa → se limpia.
     $('#inp-direccion').value = '';
     $('#inp-familia').value = '';
     $('#inp-telefono').value = '';
     votosFamilia = [];
+    personasFamilia = [];
+    partidoSeleccionado = null;
+    partidoPersonaSeleccionado = null;
     renderListaVotos();
+    renderListaPersonas();
+    seleccionarPreferencia('familia', null);
+    seleccionarPreferencia('personas', null);
     $('#inp-familia').focus();
   } catch (err) {
     const detalle = err && err.message ? err.message : 'sin conexión';
@@ -392,11 +546,23 @@ function init() {
       agregarVoto();
     }
   });
+  document.querySelectorAll('input[name="modo-registro"]').forEach((radio) =>
+    radio.addEventListener('change', () => cambiarModoRegistro(radio.value))
+  );
+  $('#btn-agregar-persona').addEventListener('click', agregarPersona);
+  $('#inp-persona-telefono').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      agregarPersona();
+    }
+  });
   $('#btn-guardar').addEventListener('click', guardarFamilia);
 
   initUbicacion();
   renderChipsPartidos();
   renderListaVotos();
+  renderListaPersonas();
+  cambiarModoRegistro('FAMILIA', { forzar: true });
 
   // Arranque de sesión robusto (3 capas):
   // 1) onAuthStateChange dispara un evento en cuanto la sesión guardada termina
@@ -423,4 +589,4 @@ function init() {
   }
 }
 
-document.addEventListener('DOMContentLoaded', init);
+if (!window.__CENSOGT_PREVIEW__) document.addEventListener('DOMContentLoaded', init);

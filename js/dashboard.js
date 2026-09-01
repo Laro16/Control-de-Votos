@@ -3,12 +3,13 @@
 // Censo de UN municipio (Tamahú): la dimensión geográfica que varía es la
 // COMUNIDAD, no el departamento/municipio. Por eso los filtros y la gráfica
 // de ubicación trabajan a nivel de comunidad.
-// Lee la vista "vista_censo" (requiere sesión de Supabase Auth con rol admin),
-// pinta KPIs, 2 gráficas y una matriz comunidad × partido; también exporta un
+// Lee "vista_censo" y "vista_personas" (requiere sesión de admin),
+// pinta KPIs, 2 gráficas y una matriz comunidad × preferencia; también exporta un
 // Excel con el mismo resumen territorial usando ExcelJS.
 // ============================================================================
 
 let censoRows = null;   // filas crudas de vista_censo
+let personasRows = null; // personas identificadas de vista_personas
 let chartPartidos = null;
 let chartComunidad = null;
 let ultimaActualizacion = null;
@@ -46,7 +47,7 @@ function mostrarEstadoDashboard(mensaje, tipo = 'ok') {
 }
 
 async function initDashboard(forzar = false) {
-  if (censoRows && !forzar) {
+  if (censoRows !== null && personasRows !== null && !forzar) {
     pintarTodo();
     return;
   }
@@ -69,23 +70,31 @@ async function initDashboard(forzar = false) {
       : null;
     if (rol !== 'admin') {
       throw new Error(
-        'Tu usuario no tiene rol de administrador. Asígnalo con el BLOQUE 5 de sql/setup.sql ' +
+        'Tu usuario no tiene rol de administrador. Asígnalo con el BLOQUE 6 de sql/setup.sql ' +
         'y vuelve a cerrar y abrir sesión para que el permiso entre en vigor.'
       );
     }
 
-    // 2) Cargar todas las líneas del censo.
-    const { data, error } = await sb
-      .from('vista_censo')
-      .select('*')
-      .order('fecha_registro', { ascending: false });
-    if (error) throw error;
+    // 2) Cargar totales y personas identificadas. Si la vista de personas aún
+    // no existe, el dashboard principal sigue funcionando y muestra un aviso.
+    const [censoResp, personasResp] = await Promise.all([
+      sb.from('vista_censo').select('*').order('fecha_registro', { ascending: false }),
+      sb.from('vista_personas').select('*').order('fecha_registro', { ascending: false }),
+    ]);
+    if (censoResp.error) throw censoResp.error;
 
-    censoRows = data || [];
+    censoRows = censoResp.data || [];
+    personasRows = personasResp.error ? [] : (personasResp.data || []);
+    if (personasResp.error && aviso) {
+      aviso.textContent = 'El resumen funciona, pero falta habilitar personas individuales. Vuelve a ejecutar sql/setup.sql en Supabase.';
+      aviso.classList.remove('hidden');
+    }
     ultimaActualizacion = new Date();
     const familias = new Set(censoRows.map((r) => r.familia_id)).size;
+    const identificadas = personasRows.length;
     mostrarEstadoDashboard(
-      `Actualizado ${ultimaActualizacion.toLocaleTimeString('es-GT', { hour: '2-digit', minute: '2-digit' })} · ${familias.toLocaleString('es-GT')} familias`
+      `Actualizado ${ultimaActualizacion.toLocaleTimeString('es-GT', { hour: '2-digit', minute: '2-digit' })} · ` +
+      `${familias.toLocaleString('es-GT')} familias · ${identificadas.toLocaleString('es-GT')} personas identificadas`
     );
     poblarFiltros();
     pintarTodo();
@@ -124,11 +133,11 @@ function llenarFiltro(el, valores, etiquetaTodos) {
 }
 
 function poblarFiltros() {
-  // Partido
+  // Preferencia (partidos + opción neutral)
   llenarFiltro(
     document.querySelector('#f-partido'),
     PARTIDOS.map((p) => p.id),
-    'Todos los partidos'
+    'Todas las preferencias'
   );
   [...document.querySelector('#f-partido').options].forEach((o) => {
     if (o.value) o.textContent = nombrePartido(o.value);
@@ -152,6 +161,20 @@ const comunidadFiltro = () => valorDe('#f-comunidad');
 // mostrando el contexto completo y atenuar los partidos no seleccionados.
 function filasFiltradas({ incluirPartido = true, incluirComunidad = true } = {}) {
   let filas = censoRows || [];
+  const partido = partidoFiltro();
+  const comunidad = comunidadFiltro();
+
+  if (incluirComunidad && comunidad) {
+    filas = filas.filter((r) => comunidadDe(r) === comunidad);
+  }
+  if (incluirPartido && partido) {
+    filas = filas.filter((r) => r.partido === partido);
+  }
+  return filas;
+}
+
+function personasFiltradas({ incluirPartido = true, incluirComunidad = true } = {}) {
+  let filas = personasRows || [];
   const partido = partidoFiltro();
   const comunidad = comunidadFiltro();
 
@@ -294,6 +317,7 @@ function pintarTodo() {
   pintarResumen();
   pintarChartPartidos();
   pintarTablaComunidades();
+  pintarRegistros();
   pintarChartComunidad();
   actualizarPista();
 }
@@ -306,7 +330,7 @@ function actualizarPista() {
   const chips = document.querySelector('#filtros-activos');
   const exportContext = document.querySelector('#export-context');
   const filtros = [];
-  if (p) filtros.push({ tipo: 'partido', texto: `Partido: ${nombrePartido(p)}` });
+  if (p) filtros.push({ tipo: 'partido', texto: `Preferencia: ${nombrePartido(p)}` });
   if (c) filtros.push({ tipo: 'comunidad', texto: `Comunidad: ${c}` });
 
   if (conteo) {
@@ -352,7 +376,7 @@ function actualizarPista() {
     return;
   }
   const partes = [];
-  if (p) partes.push(`Partido: ${nombrePartido(p)}`);
+  if (p) partes.push(`Preferencia: ${nombrePartido(p)}`);
   if (c) partes.push(`Comunidad: ${c}`);
   pista.textContent = 'Mostrando → ' + partes.join('   ·   ');
 }
@@ -366,7 +390,7 @@ function agrupar(filas, fnClave) {
   return mapa;
 }
 
-// --- Matriz comunidad × partido --------------------------------------------
+// --- Matriz comunidad × preferencia ----------------------------------------
 
 function resumenPorComunidades(filas) {
   const mapa = new Map();
@@ -461,7 +485,7 @@ function pintarEncabezadoComunidades() {
     fila.appendChild(th);
   });
 
-  ['Total', 'Líder', 'Detalle'].forEach((texto) => {
+  ['Total', 'Preferencia principal', 'Detalle'].forEach((texto) => {
     const th = crearCelda(texto, 'th');
     th.scope = 'col';
     fila.appendChild(th);
@@ -575,6 +599,184 @@ function pintarTablaComunidades() {
   }
 }
 
+// --- Administración de familias registradas --------------------------------
+
+function resumenPorFamilias(filas, personas = []) {
+  const mapa = new Map();
+
+  (filas || []).forEach((r) => {
+    if (!mapa.has(r.familia_id)) {
+      mapa.set(r.familia_id, {
+        id: r.familia_id,
+        comunidad: comunidadDe(r),
+        nombre: r.nombre_familia || 'Familia sin nombre',
+        telefono: r.telefono || '',
+        modoRegistro: r.modo_registro || 'FAMILIA',
+        registradoPor: r.registrado_por || '',
+        fechaRegistro: r.fecha_registro || '',
+        preferencias: new Map(),
+        personas: [],
+        total: 0,
+      });
+    }
+
+    const item = mapa.get(r.familia_id);
+    const cantidad = Number(r.cantidad) || 0;
+    item.preferencias.set(r.partido, (item.preferencias.get(r.partido) || 0) + cantidad);
+    item.total += cantidad;
+  });
+
+  (personas || []).forEach((persona) => {
+    const item = mapa.get(persona.familia_id);
+    if (item) item.personas.push(persona);
+  });
+
+  return [...mapa.values()].sort((a, b) => {
+    const fechaA = new Date(a.fechaRegistro).getTime() || 0;
+    const fechaB = new Date(b.fechaRegistro).getTime() || 0;
+    return fechaB - fechaA || a.nombre.localeCompare(b.nombre, 'es');
+  });
+}
+
+function crearBadgePreferencia(sigla, cantidad) {
+  const p = PARTIDOS.find((x) => x.id === sigla);
+  const badge = document.createElement('span');
+  badge.className = 'dash-preference-badge';
+  badge.style.setProperty('--party-color', colorPartido(sigla));
+  badge.title = p ? p.nombre : sigla;
+  badge.textContent = `${p ? p.sigla : sigla}: ${cantidad.toLocaleString('es-GT')}`;
+  return badge;
+}
+
+function pintarRegistros() {
+  const body = document.querySelector('#tabla-registros-body');
+  const shell = document.querySelector('.dash-records-shell');
+  const vacio = document.querySelector('#tabla-registros-vacia');
+  const contador = document.querySelector('#registros-conteo');
+  if (!body) return;
+
+  body.innerHTML = '';
+  const idsEnAmbito = new Set(filasFiltradas().map((r) => r.familia_id));
+  const familiasEnAmbito = (censoRows || []).filter((r) => idsEnAmbito.has(r.familia_id));
+  const personasEnAmbito = (personasRows || []).filter((r) => idsEnAmbito.has(r.familia_id));
+  const resumen = resumenPorFamilias(familiasEnAmbito, personasEnAmbito);
+  const busqueda = normalizarTexto(valorDe('#buscar-registro'));
+  const visibles = resumen.filter((item) => {
+    const nombresPersonas = item.personas.map((p) => p.nombre_persona).join(' ');
+    const texto = [item.nombre, nombresPersonas, item.comunidad, item.telefono, item.registradoPor].join(' ');
+    return !busqueda || normalizarTexto(texto).includes(busqueda);
+  });
+
+  if (contador) {
+    const identificadas = visibles.reduce((suma, item) => suma + item.personas.length, 0);
+    contador.textContent = `${visibles.length} de ${resumen.length} ${resumen.length === 1 ? 'registro' : 'registros'} · ` +
+      `${identificadas} ${identificadas === 1 ? 'persona' : 'personas'}`;
+  }
+  if (shell) shell.classList.toggle('hidden', visibles.length === 0);
+  if (vacio) vacio.classList.toggle('hidden', visibles.length > 0);
+
+  visibles.forEach((item) => {
+    const tr = document.createElement('tr');
+    tr.appendChild(crearCelda(item.comunidad));
+
+    const familia = document.createElement('td');
+    const nombre = document.createElement('span');
+    nombre.className = 'dash-record-name';
+    nombre.textContent = item.nombre;
+    familia.appendChild(nombre);
+    if (item.telefono) {
+      const telefono = document.createElement('span');
+      telefono.className = 'dash-record-meta';
+      telefono.textContent = item.telefono;
+      familia.appendChild(telefono);
+    }
+    tr.appendChild(familia);
+
+    const captura = document.createElement('td');
+    const modo = document.createElement('span');
+    modo.className = 'dash-capture-badge';
+    if (item.modoRegistro === 'PERSONAS') {
+      modo.classList.add('is-individual');
+      modo.textContent = `${item.personas.length} ${item.personas.length === 1 ? 'persona' : 'personas'}`;
+    } else {
+      modo.textContent = 'Cantidades';
+    }
+    captura.appendChild(modo);
+    tr.appendChild(captura);
+
+    const total = crearCelda(item.total.toLocaleString('es-GT'));
+    total.className = 'dash-total-cell';
+    tr.appendChild(total);
+
+    const preferencias = document.createElement('td');
+    preferencias.className = 'dash-preference-list';
+    [...item.preferencias.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .forEach(([sigla, cantidad]) => preferencias.appendChild(crearBadgePreferencia(sigla, cantidad)));
+    tr.appendChild(preferencias);
+
+    const registro = document.createElement('td');
+    const fecha = document.createElement('span');
+    fecha.className = 'dash-record-name';
+    const fechaObj = new Date(item.fechaRegistro);
+    fecha.textContent = Number.isNaN(fechaObj.getTime())
+      ? 'Sin fecha'
+      : fechaObj.toLocaleDateString('es-GT', { year: 'numeric', month: 'short', day: 'numeric' });
+    registro.appendChild(fecha);
+    if (item.registradoPor) {
+      const usuario = document.createElement('span');
+      usuario.className = 'dash-record-meta';
+      usuario.textContent = item.registradoPor;
+      registro.appendChild(usuario);
+    }
+    tr.appendChild(registro);
+
+    const accion = document.createElement('td');
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'dash-danger-button';
+    btn.textContent = 'Eliminar';
+    btn.setAttribute('aria-label', `Eliminar registro de ${item.nombre}`);
+    btn.addEventListener('click', () => eliminarFamilia(item, btn));
+    accion.appendChild(btn);
+    tr.appendChild(accion);
+    body.appendChild(tr);
+  });
+}
+
+async function eliminarFamilia(item, btn) {
+  if (!currentUser || currentUser.role !== 'admin') {
+    toast('Solo el administrador puede eliminar registros.', 'error');
+    return;
+  }
+
+  const confirmado = window.confirm(
+    `¿Eliminar el registro completo de "${item.nombre}"?\n\n` +
+    `${item.total.toLocaleString('es-GT')} votantes dejarán de aparecer en el dashboard y en las exportaciones.`
+  );
+  if (!confirmado) return;
+
+  const textoOriginal = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Eliminando…';
+  try {
+    const { data, error } = await sb.rpc('anular_familia', { familia_objetivo: item.id });
+    if (error) throw error;
+    if (data === false) throw new Error('El registro ya no existe o ya fue eliminado.');
+
+    censoRows = (censoRows || []).filter((r) => r.familia_id !== item.id);
+    personasRows = (personasRows || []).filter((r) => r.familia_id !== item.id);
+    poblarFiltros();
+    pintarTodo();
+    toast(`Registro de ${item.nombre} eliminado.`);
+  } catch (err) {
+    const detalle = err && err.message ? err.message : 'error desconocido';
+    toast(`No se pudo eliminar (${detalle}). Verifica que sql/setup.sql esté actualizado.`, 'error');
+    btn.disabled = false;
+    btn.textContent = textoOriginal;
+  }
+}
+
 function pintarResumen() {
   const filas = filasFiltradas();
   const familias = new Set(filas.map((r) => r.familia_id)).size;
@@ -582,7 +784,7 @@ function pintarResumen() {
 
   const cubiertas = new Set(filas.map(comunidadDe)).size;
 
-  // Partido líder dentro del ámbito filtrado
+  // Preferencia principal dentro del ámbito filtrado
   const porPartido = agrupar(filas, (r) => r.partido);
   let lider = '—';
   let colorLider = INK_900;
@@ -620,7 +822,7 @@ function pintarResumen() {
   cardLider.style.color = colorLider;
 
   const liderLabel = document.querySelector('#card-lider-label');
-  if (liderLabel) liderLabel.textContent = partidoFiltro() ? 'Partido filtrado' : 'Partido líder';
+  if (liderLabel) liderLabel.textContent = partidoFiltro() ? 'Preferencia filtrada' : 'Preferencia principal';
 
   const pctEl = document.querySelector('#card-lider-pct');
   if (pctEl) pctEl.innerHTML = siglaLider ? `${pctLider}% de los votos` : '&nbsp;';
@@ -644,15 +846,15 @@ function mostrarVacio(id, mostrar) {
   el.classList.toggle('flex', mostrar);
 }
 
-// --- Gráfica A: votos por partido (barras horizontales, con logo) -------------
+// --- Gráfica A: votantes por preferencia (barras horizontales, con logo) ------
 
 function pintarChartPartidos() {
   const filas = filasFiltradas({ incluirPartido: false });
   const lugar = comunidadFiltro() || 'todo el municipio';
-  document.querySelector('#titulo-chart-partidos').textContent = `Votantes por partido · ${lugar}`;
+  document.querySelector('#titulo-chart-partidos').textContent = `Votantes por preferencia · ${lugar}`;
 
   const porPartido = agrupar(filas, (r) => r.partido);
-  // Todos los partidos aparecen (aunque tengan 0), ordenados de mayor a menor.
+  // Todas las preferencias aparecen (aunque tengan 0), ordenadas de mayor a menor.
   const datos = PARTIDOS
     .map((p) => ({ id: p.id, nombre: p.nombre, total: porPartido.get(p.id) || 0 }))
     .sort((a, b) => b.total - a.total);
@@ -773,8 +975,45 @@ window.addEventListener('load', () => {
 });
 
 // ============================================================================
-// EXPORTACIÓN A EXCEL (ExcelJS) — Resumen + gráficas + Detalle + Por comunidad
+// EXPORTACIÓN A EXCEL — resumen, comunidades, personas y seguimiento neutral
 // ============================================================================
+
+function crearSeguimientoNeutral(filasVotos, filasPersonas) {
+  const personasNeutrales = (filasPersonas || []).filter((r) => r.partido === 'NEUTRAL');
+  const familiasConNombres = new Set(personasNeutrales.map((r) => r.familia_id));
+
+  const individuales = personasNeutrales.map((r) => ({
+    tipo: 'Persona individual',
+    persona: r.nombre_persona || '',
+    familia: r.nombre_familia || '',
+    telefono: r.telefono_persona || r.telefono_familia || '',
+    comunidad: comunidadDe(r),
+    caserio: r.caserio || '',
+    cantidad: 1,
+    registrado: r.registrado_por || '',
+    fecha: r.fecha_registro || '',
+  }));
+
+  const agrupados = (filasVotos || [])
+    .filter((r) => r.partido === 'NEUTRAL' && !familiasConNombres.has(r.familia_id))
+    .map((r) => ({
+      tipo: 'Cantidad familiar',
+      persona: '',
+      familia: r.nombre_familia || '',
+      telefono: r.telefono || '',
+      comunidad: comunidadDe(r),
+      caserio: r.caserio || '',
+      cantidad: Number(r.cantidad) || 0,
+      registrado: r.registrado_por || '',
+      fecha: r.fecha_registro || '',
+    }));
+
+  return [...individuales, ...agrupados].sort((a, b) =>
+    a.comunidad.localeCompare(b.comunidad, 'es') ||
+    a.familia.localeCompare(b.familia, 'es') ||
+    a.persona.localeCompare(b.persona, 'es')
+  );
+}
 
 const XL = {
   ink:    'FF111826',
@@ -795,6 +1034,7 @@ async function exportarExcel() {
   }
 
   const filasAmbito = filasFiltradas();
+  const personasAmbito = personasFiltradas();
   if (filasAmbito.length === 0) {
     return toast('No hay datos que coincidan con los filtros actuales.', 'aviso');
   }
@@ -814,7 +1054,7 @@ async function exportarExcel() {
     const partido = partidoFiltro();
     const partesAmbito = [];
     if (com) partesAmbito.push(`Comunidad: ${com}`);
-    if (partido) partesAmbito.push(`Partido: ${nombrePartido(partido)}`);
+    if (partido) partesAmbito.push(`Preferencia: ${nombrePartido(partido)}`);
     const ambito = partesAmbito.length
       ? partesAmbito.join(' · ')
       : 'Todo el municipio (Tamahú)';
@@ -850,7 +1090,8 @@ async function exportarExcel() {
 
     ws.mergeCells('B3:E3');
     const sub = ws.getCell('B3');
-    sub.value = `Ámbito: ${ambito}   ·   Generado: ${new Date().toLocaleString('es-GT')}`;
+    sub.value = `Ámbito: ${ambito}   ·   ${personasAmbito.length} personas identificadas   ·   ` +
+      `Generado: ${new Date().toLocaleString('es-GT')}`;
     sub.font = { name: 'Arial', size: 9, color: { argb: XL.gris } };
     sub.alignment = { indent: 1 };
 
@@ -859,7 +1100,7 @@ async function exportarExcel() {
       ['Familias censadas', familias],
       ['Votantes registrados', votos],
       ['Comunidades cubiertas', TOTAL_COMUNIDADES ? `${cubiertas} / ${TOTAL_COMUNIDADES}` : cubiertas],
-      ['Partido líder', lider],
+      ['Preferencia principal', lider],
     ];
     let fila = 5;
     kpis.forEach(([etq, val], i) => {
@@ -871,13 +1112,13 @@ async function exportarExcel() {
       const cVal = ws.getCell(`B${rVal}`);
       cVal.value = typeof val === 'number' ? val : String(val);
       cVal.font = { name: 'Arial', size: 20, bold: true,
-        color: { argb: etq === 'Partido líder' ? argb(colorPartido(lider)) : XL.ink } };
+        color: { argb: etq === 'Preferencia principal' ? argb(colorPartido(lider)) : XL.ink } };
       if (typeof val === 'number') cVal.numFmt = '#,##0';
     });
 
-    // Tabla "Votos por partido" (a la derecha de los KPIs)
+    // Tabla de votantes por preferencia (a la derecha de los KPIs)
     const encTablaFila = 5;
-    ws.getCell(`D${encTablaFila}`).value = 'PARTIDO';
+    ws.getCell(`D${encTablaFila}`).value = 'PREFERENCIA';
     ws.getCell(`E${encTablaFila}`).value = 'VOTANTES';
     ['D', 'E'].forEach((c) => {
       const cell = ws.getCell(`${c}${encTablaFila}`);
@@ -934,7 +1175,8 @@ async function exportarExcel() {
       { header: 'Dirección',      key: 'direccion',  width: 22 },
       { header: 'Familia',        key: 'familia',    width: 26 },
       { header: 'Teléfono',       key: 'telefono',   width: 14 },
-      { header: 'Partido',        key: 'partido',    width: 10 },
+      { header: 'Tipo de captura', key: 'modo',      width: 18 },
+      { header: 'Preferencia',    key: 'partido',    width: 18 },
       { header: 'Votantes',       key: 'votos',      width: 10 },
       { header: 'Registrado por', key: 'registrado', width: 24 },
       { header: 'Fecha',          key: 'fecha',      width: 20 },
@@ -948,7 +1190,8 @@ async function exportarExcel() {
         direccion: r.direccion || '',
         familia: r.nombre_familia,
         telefono: r.telefono || '',
-        partido: r.partido,
+        modo: r.modo_registro === 'PERSONAS' ? 'Personas individuales' : 'Cantidades por familia',
+        partido: nombrePartido(r.partido),
         votos: r.cantidad,
         registrado: r.registrado_por || '',
         fecha: new Date(r.fecha_registro).toLocaleString('es-GT'),
@@ -957,7 +1200,7 @@ async function exportarExcel() {
     estilizarTabla(wd, cols.length);
 
     // ========================================================================
-    // HOJA 3 · POR COMUNIDAD (matriz comunidad × partido)
+    // HOJA 3 · POR COMUNIDAD (matriz comunidad × preferencia)
     // ========================================================================
     const wc = wb.addWorksheet('Por comunidad', { views: [{ state: 'frozen', ySplit: 1, xSplit: 2 }] });
     const siglas = partido ? [partido] : PARTIDOS.map((p) => p.id);
@@ -966,7 +1209,7 @@ async function exportarExcel() {
       { header: 'Familias', key: 'familias', width: 10 },
       ...siglas.map((s) => ({ header: s, key: s, width: 9 })),
       { header: 'Total votantes', key: 'total', width: 14 },
-      { header: 'Partido líder', key: 'lider', width: 22 },
+      { header: 'Preferencia principal', key: 'lider', width: 28 },
     ];
     const resumenComunidades = ordenarResumenComunidades(
       resumenPorComunidades(filasAmbito),
@@ -999,10 +1242,70 @@ async function exportarExcel() {
     filaTotal.font = { name: 'Arial', size: 10, bold: true };
 
     estilizarTabla(wc, siglas.length + 4);
-    // Colorear encabezados de partido con su color
+    // Colorear encabezados de preferencia con su color
     siglas.forEach((s, i) => {
       const cell = wc.getRow(1).getCell(i + 3);
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(colorPartido(s)) } };
+    });
+
+    // ========================================================================
+    // HOJA 4 · PERSONAS IDENTIFICADAS
+    // ========================================================================
+    const wp = wb.addWorksheet('Personas', { views: [{ state: 'frozen', ySplit: 1 }] });
+    const columnasPersonas = [
+      { header: 'Comunidad', key: 'comunidad', width: 24 },
+      { header: 'Caserío', key: 'caserio', width: 18 },
+      { header: 'Familia', key: 'familia', width: 26 },
+      { header: 'Persona', key: 'persona', width: 28 },
+      { header: 'Teléfono personal', key: 'telefonoPersona', width: 16 },
+      { header: 'Teléfono familiar', key: 'telefonoFamilia', width: 16 },
+      { header: 'Preferencia', key: 'preferencia', width: 28 },
+      { header: 'Registrado por', key: 'registrado', width: 24 },
+      { header: 'Fecha', key: 'fecha', width: 20 },
+    ];
+    wp.columns = columnasPersonas;
+    personasAmbito.forEach((r) => {
+      wp.addRow({
+        comunidad: comunidadDe(r),
+        caserio: r.caserio || '',
+        familia: r.nombre_familia || '',
+        persona: r.nombre_persona || '',
+        telefonoPersona: r.telefono_persona || '',
+        telefonoFamilia: r.telefono_familia || '',
+        preferencia: nombrePartido(r.partido),
+        registrado: r.registrado_por || '',
+        fecha: r.fecha_registro ? new Date(r.fecha_registro).toLocaleString('es-GT') : '',
+      });
+    });
+    estilizarTabla(wp, columnasPersonas.length);
+
+    // ========================================================================
+    // HOJA 5 · SEGUIMIENTO SIN PREFERENCIA
+    // Incluye nombres individuales y, cuando sólo se capturaron cantidades,
+    // conserva la familia y su teléfono como punto de contacto.
+    // ========================================================================
+    const wn = wb.addWorksheet('Seguimiento neutral', { views: [{ state: 'frozen', ySplit: 1 }] });
+    const columnasNeutral = [
+      { header: 'Tipo de registro', key: 'tipo', width: 20 },
+      { header: 'Persona', key: 'persona', width: 28 },
+      { header: 'Familia', key: 'familia', width: 26 },
+      { header: 'Teléfono de contacto', key: 'telefono', width: 18 },
+      { header: 'Comunidad', key: 'comunidad', width: 24 },
+      { header: 'Caserío', key: 'caserio', width: 18 },
+      { header: 'Cantidad neutral', key: 'cantidad', width: 16 },
+      { header: 'Registrado por', key: 'registrado', width: 24 },
+      { header: 'Fecha', key: 'fecha', width: 20 },
+    ];
+    wn.columns = columnasNeutral;
+    crearSeguimientoNeutral(filasAmbito, personasAmbito).forEach((r) => {
+      wn.addRow({
+        ...r,
+        fecha: r.fecha ? new Date(r.fecha).toLocaleString('es-GT') : '',
+      });
+    });
+    estilizarTabla(wn, columnasNeutral.length);
+    wn.getRow(1).eachCell((cell) => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF667085' } };
     });
 
     // ---- Descargar ----------------------------------------------------------
@@ -1066,6 +1369,7 @@ document.addEventListener('DOMContentLoaded', () => {
   alEvento('#f-comunidad', 'change', pintarTodo);
   alEvento('#buscar-comunidad', 'input', pintarTablaComunidades);
   alEvento('#orden-comunidades', 'change', pintarTablaComunidades);
+  alEvento('#buscar-registro', 'input', pintarRegistros);
   alEvento('#btn-refrescar', 'click', () => initDashboard(true));
   alEvento('#btn-limpiar', 'click', () => {
     const p = document.querySelector('#f-partido');
